@@ -7,8 +7,8 @@ npm (v9.0.0 or higher) or yarn (v1.22.0 or higher)
 Git for version control
 Installation
 Clone the repository
-git clone https://github.com/ACSES-SRID/acses-website.git
-cd acses-website
+git clone https://github.com/thecallistusaidoo/hostelhub.git
+cd hostelhub
 Install dependencies
 npm install
 or using yarn:
@@ -18,7 +18,7 @@ Development
 Start the development server with hot module replacement (HMR):
 
 npm run dev
-The application will be available at http://localhost:5173
+The application will be available at http://localhost:3000
 
 Building for Production
 Create an optimized production build:
