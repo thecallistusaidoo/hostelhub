@@ -2,6 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Base reset ── */
 html, body {
   margin: 0;
   padding: 0;
@@ -11,8 +12,31 @@ html, body {
 body {
   display: flex;
   flex-direction: column;
+  background-color: #f9fafb;
 }
 
 main {
   flex: 1;
+}
+
+/* ── Utility: line-clamp (fallback for older Tailwind) ── */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── Smooth scrolling ── */
+html {
+  scroll-behavior: smooth;
+}
+
+/* ── Card hover lift (reinforces Tailwind hover:-translate-y-1) ── */
+.hostel-card {
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.hostel-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px -12px rgba(30, 64, 175, 0.15);
 }
