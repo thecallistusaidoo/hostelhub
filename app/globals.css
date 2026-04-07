@@ -2,24 +2,39 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Base reset ── */
-html, body {
-  margin: 0;
-  padding: 0;
-  min-height: 100%;
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600&display=swap');
+
+:root {
+  --blue: #1E40AF;
+  --blue-dark: #1e3a8a;
+  --blue-light: #EFF6FF;
+  --gold: #F59E0B;
+  --gold-light: #FEF3C7;
+  --gray-bg: #F3F4F6;
+  --text: #374151;
+  --text-muted: #6B7280;
+  --radius: 14px;
 }
+
+html { scroll-behavior: smooth; }
 
 body {
-  display: flex;
-  flex-direction: column;
-  background-color: #f9fafb;
+  font-family: 'DM Sans', sans-serif;
+  color: var(--text);
+  background: var(--gray-bg);
 }
 
-main {
-  flex: 1;
+h1, h2, h3, h4 {
+  font-family: 'Plus Jakarta Sans', sans-serif;
 }
 
-/* ── Utility: line-clamp (fallback for older Tailwind) ── */
+/* Line clamp utilities */
+.line-clamp-1 {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .line-clamp-2 {
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -27,16 +42,36 @@ main {
   overflow: hidden;
 }
 
-/* ── Smooth scrolling ── */
-html {
-  scroll-behavior: smooth;
-}
-
-/* ── Card hover lift (reinforces Tailwind hover:-translate-y-1) ── */
+/* Hostel card hover */
 .hostel-card {
   transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
 .hostel-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 20px 40px -12px rgba(30, 64, 175, 0.15);
+  transform: translateY(-5px);
+  box-shadow: 0 24px 48px -12px rgba(30, 64, 175, 0.18);
 }
+
+/* Input focus ring */
+.input-field {
+  @apply w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition bg-white;
+}
+
+/* Primary button */
+.btn-primary {
+  @apply bg-[#1E40AF] hover:bg-[#1e3a8a] text-white font-semibold rounded-xl px-5 py-2.5 transition-all duration-200 text-sm;
+}
+
+/* Gold button */
+.btn-gold {
+  @apply bg-[#F59E0B] hover:bg-amber-500 text-white font-semibold rounded-xl px-5 py-2.5 transition-all duration-200 text-sm;
+}
+
+/* Ghost button */
+.btn-ghost {
+  @apply border border-gray-200 hover:border-[#1E40AF] text-gray-600 hover:text-[#1E40AF] font-semibold rounded-xl px-5 py-2.5 transition-all duration-200 text-sm bg-white;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 99px; }

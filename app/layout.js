@@ -1,8 +1,9 @@
 import "./globals.css";
+import { Plus_Jakarta_Sans, DM_Sans } from "next/font/google";
 
 export const metadata = {
-  title: "HostelHub - UMaT",
-  description: "Find and list hostels around UMaT campus",
+  title: "HostelHub – UMaT Student Hostels",
+  description: "Find verified hostels near UMaT campus",
 };
 
 export default function RootLayout({ children }) {
