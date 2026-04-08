@@ -1,8 +1,0 @@
-{
-  "/student/dashboard/page": "app/student/dashboard/page.js",
-  "/hostel/[id]/page": "app/hostel/[id]/page.js",
-  "/student/signup/page": "app/student/signup/page.js",
-  "/host/login/page": "app/host/login/page.js",
-  "/host/dashboard/page": "app/host/dashboard/page.js",
-  "/host/signup/page": "app/host/signup/page.js"
-}
