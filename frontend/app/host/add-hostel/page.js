@@ -1,6 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { host as hostAPI, getUser } from "../../lib/api";
 
 const AMENITIES_LIST = ["WiFi","Water","Electricity","Generator","Kitchen","Security","AC","Laundry","Parking","Wardrobe"];
 const LOCATIONS = ["Umat (Near Campus)","Tarkwa Town","Nyankomasi","Bogoso","Other"];
@@ -8,6 +10,10 @@ const LOCATIONS = ["Umat (Near Campus)","Tarkwa Town","Nyankomasi","Bogoso","Oth
 export default function AddHostelPage() {
   const [step, setStep] = useState(1);
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+  const router = useRouter();
+  const user = useMemo(() => getUser(), []);
   const [form, setForm] = useState({
     name:"", location:"", address:"", ghanaPost:"", landmark:"", campusDistance:"",
     description:"", gender:"Mixed", amenities:[], priceFrom:"", priceTo:"",
@@ -18,8 +24,46 @@ export default function AddHostelPage() {
   const toggleAmenity = (a) => set("amenities", form.amenities.includes(a) ? form.amenities.filter(x=>x!==a) : [...form.amenities,a]);
 
   const handleSubmit = async () => {
-    // In production: POST to /api/hosts/add-hostel with FormData
-    setSubmitted(true);
+    setError(null);
+    if (!user || user.role !== "host") {
+      router.push("/login");
+      return;
+    }
+    if (!form.name || !form.location || !form.description) {
+      setError("Please fill hostel name, location, and description.");
+      return;
+    }
+
+    const fd = new FormData();
+    fd.append("name", form.name);
+    fd.append("location", form.location);
+    fd.append("address", form.address || "");
+    fd.append("ghanaPost", form.ghanaPost || "");
+    fd.append("landmark", form.landmark || "");
+    fd.append("campusDistance", form.campusDistance || "");
+    fd.append("description", form.description);
+    fd.append("gender", form.gender || "Mixed");
+    fd.append("amenities", JSON.stringify(form.amenities || []));
+    fd.append("priceFrom", form.priceFrom || "");
+    fd.append("priceTo", form.priceTo || "");
+
+    // Backend expects: images + documents
+    if (form.additionalImages?.length) {
+      Array.from(form.additionalImages).forEach((file) => fd.append("images", file));
+    }
+    if (form.ownershipDoc?.length) {
+      Array.from(form.ownershipDoc).forEach((file) => fd.append("documents", file));
+    }
+
+    setSubmitting(true);
+    try {
+      await hostAPI.addHostel(fd);
+      setSubmitted(true);
+    } catch (e) {
+      setError(e.message || "Failed to submit hostel.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (submitted) return (
@@ -68,6 +112,11 @@ export default function AddHostelPage() {
       </header>
 
       <div className="max-w-3xl mx-auto px-4 py-8">
+        {error && (
+          <div className="mb-5 bg-red-50 border border-red-200 text-red-700 text-sm font-semibold rounded-xl px-4 py-3">
+            {error}
+          </div>
+        )}
         {/* Progress */}
         <div className="flex items-center gap-3 mb-8">
           {[1,2,3].map(s => (
@@ -241,8 +290,8 @@ export default function AddHostelPage() {
 
               <div className="flex gap-3 justify-end">
                 <button onClick={() => setStep(2)} className="border border-gray-200 text-gray-600 font-semibold rounded-xl px-6 py-3 transition hover:border-gray-300 bg-white">← Back</button>
-                <button onClick={handleSubmit} className="bg-[#F59E0B] hover:bg-amber-500 text-white font-bold rounded-xl px-8 py-3 transition">
-                  Submit for Review
+                <button onClick={handleSubmit} disabled={submitting} className="bg-[#F59E0B] hover:bg-amber-500 disabled:opacity-60 text-white font-bold rounded-xl px-8 py-3 transition">
+                  {submitting ? "Submitting..." : "Submit for Review"}
                 </button>
               </div>
             </div>

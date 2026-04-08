@@ -1,120 +1,88 @@
 const express = require("express");
 const router = express.Router();
-const { Message, Student, Host } = require("../models");
-const { protect, validate } = require("../middleware");
-const { messageSchema } = require("../utils/validation");
+const { Message } = require("../models");
+const { protect } = require("../middleware");
 
-// POST /api/messages — send a message
-router.post("/", protect, validate(messageSchema), async (req, res, next) => {
+// POST /api/messages
+router.post("/", protect, async (req, res, next) => {
   try {
     const { receiverId, receiverModel, hostelId, body } = req.body;
-
-    // Determine sender model from JWT role
+    if (!body?.trim()) return res.status(400).json({ message: "Message cannot be empty." });
+    if (!receiverId || !receiverModel) return res.status(400).json({ message: "receiverId and receiverModel required." });
     const senderModel = req.user.role === "student" ? "Student" : "Host";
-
     const message = await Message.create({
-      senderId: req.user.id,
-      senderModel,
-      receiverId,
-      receiverModel,
-      hostelId,
-      body,
+      senderId: req.user.id, senderModel,
+      receiverId, receiverModel,
+      hostelId: hostelId || undefined,
+      body: body.trim(),
     });
-
-    res.status(201).json({ message: "Message sent.", data: message });
+    res.status(201).json({ message: "Sent.", data: message });
   } catch (err) { next(err); }
 });
 
 // GET /api/messages/conversation/:userId
-// Returns full conversation thread between current user and :userId
 router.get("/conversation/:userId", protect, async (req, res, next) => {
   try {
     const me = req.user.id;
     const other = req.params.userId;
-
     const messages = await Message.find({
       $or: [
-        { senderId: me,    receiverId: other },
+        { senderId: me, receiverId: other },
         { senderId: other, receiverId: me },
       ],
     }).sort({ createdAt: 1 });
-
-    // Mark messages from other party as read
-    await Message.updateMany(
-      { senderId: other, receiverId: me, read: false },
-      { read: true }
-    );
-
+    // Mark their messages to me as read
+    await Message.updateMany({ senderId: other, receiverId: me, read: false }, { read: true });
     res.json({ messages });
   } catch (err) { next(err); }
 });
 
-// GET /api/messages/inbox — list all conversations (grouped by other party)
+// GET /api/messages/inbox — list all conversation partners with latest message
 router.get("/inbox", protect, async (req, res, next) => {
   try {
     const me = req.user.id.toString();
-
-    // Get all messages involving me
     const all = await Message.find({
       $or: [{ senderId: me }, { receiverId: me }],
-    }).sort({ createdAt: -1 });
+    })
+      .populate("senderId", "firstName lastName fullName")
+      .populate("receiverId", "firstName lastName fullName")
+      .populate("hostelId", "name")
+      .sort({ createdAt: -1 });
 
-    // Group by conversation partner
-    const conversations = {};
-    all.forEach(msg => {
-      const otherId = msg.senderId.toString() === me
-        ? msg.receiverId.toString()
-        : msg.senderId.toString();
-      if (!conversations[otherId]) {
-        conversations[otherId] = { latestMessage: msg, unreadCount: 0 };
+    // Group into conversations by partner ID
+    const seen = new Set();
+    const conversations = [];
+    for (const msg of all) {
+      const partner = msg.senderId._id.toString() === me ? msg.receiverId : msg.senderId;
+      const partnerId = partner._id.toString();
+      if (!seen.has(partnerId)) {
+        seen.add(partnerId);
+        const unread = all.filter(m =>
+          m.senderId._id.toString() === partnerId &&
+          m.receiverId._id.toString() === me &&
+          !m.read
+        ).length;
+        conversations.push({
+          partnerId,
+          partnerName: partner.firstName
+            ? `${partner.firstName} ${partner.lastName}`
+            : partner.fullName,
+          hostelName: msg.hostelId?.name || "",
+          hostelId: msg.hostelId?._id,
+          latestMessage: msg.body,
+          latestTime: msg.createdAt,
+          unread,
+        });
       }
-      if (msg.receiverId.toString() === me && !msg.read) {
-        conversations[otherId].unreadCount++;
-      }
-    });
-
-    const partnerIds = Object.keys(conversations);
-    const [students, hosts] = await Promise.all([
-      Student.find({ _id: { $in: partnerIds } }).select("firstName lastName"),
-      Host.find({ _id: { $in: partnerIds } }).select("fullName"),
-    ]);
-    const studentMap = new Map(students.map(s => [s._id.toString(), s]));
-    const hostMap = new Map(hosts.map(h => [h._id.toString(), h]));
-
-    const list = partnerIds.map((partnerId) => {
-      const { latestMessage, unreadCount } = conversations[partnerId];
-      let partnerName = "User";
-      let partnerRole = "unknown";
-      const st = studentMap.get(partnerId);
-      const ho = hostMap.get(partnerId);
-      if (st) {
-        partnerName = `${st.firstName} ${st.lastName}`.trim();
-        partnerRole = "student";
-      } else if (ho) {
-        partnerName = ho.fullName;
-        partnerRole = "host";
-      }
-      return {
-        partnerId,
-        partnerName,
-        partnerRole,
-        unreadCount,
-        latestMessage,
-      };
-    });
-
-    list.sort((a, b) => new Date(b.latestMessage.createdAt) - new Date(a.latestMessage.createdAt));
-
-    res.json({ conversations: list });
+    }
+    res.json({ conversations });
   } catch (err) { next(err); }
 });
 
 // GET /api/messages/unread-count
 router.get("/unread-count", protect, async (req, res, next) => {
   try {
-    const count = await Message.countDocuments({
-      receiverId: req.user.id, read: false,
-    });
+    const count = await Message.countDocuments({ receiverId: req.user.id, read: false });
     res.json({ unreadCount: count });
   } catch (err) { next(err); }
 });

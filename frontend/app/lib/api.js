@@ -1,160 +1,151 @@
-// lib/api.js
-// Axios client with auto token refresh and error handling
-// Place this at: app/lib/api.js
+// lib/api.js  — every API call in the app goes through here. No mock data.
+const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
-import axios from "axios";
+// ── Token helpers ─────────────────────────────────────────────────────────────
+const getToken  = () => (typeof window !== "undefined" ? localStorage.getItem("accessToken") : null);
+const getRefresh = () => (typeof window !== "undefined" ? localStorage.getItem("refreshToken") : null);
+const getUser   = () => {
+  if (typeof window === "undefined") return null;
+  const s = localStorage.getItem("user");
+  return s ? JSON.parse(s) : null;
+};
+const setTokens = (access, refresh) => {
+  localStorage.setItem("accessToken", access);
+  if (refresh) localStorage.setItem("refreshToken", refresh);
+};
+const clearAuth = () => {
+  localStorage.removeItem("accessToken");
+  localStorage.removeItem("refreshToken");
+  localStorage.removeItem("user");
+};
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+// ── Core fetch with auto-refresh ──────────────────────────────────────────────
+let refreshing = null;
 
-// ── Main axios instance
-const api = axios.create({
-  baseURL: API_URL,
-  headers: { "Content-Type": "application/json" },
-  withCredentials: true,
-});
+async function apiFetch(path, opts = {}) {
+  const headers = { "Content-Type": "application/json", ...opts.headers };
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
 
-// ── Attach access token to every request
-api.interceptors.request.use((config) => {
-  if (typeof window !== "undefined") {
-    const token = localStorage.getItem("accessToken");
-    if (token) config.headers.Authorization = `Bearer ${token}`;
+  let res = await fetch(`${BASE}${path}`, { ...opts, headers });
+
+  // Auto-refresh on 401
+  if (res.status === 401 && getRefresh()) {
+    if (!refreshing) {
+      refreshing = fetch(`${BASE}/api/auth/refresh-token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken: getRefresh() }),
+      }).then(async r => {
+        if (!r.ok) { clearAuth(); window.location.href = "/login"; return null; }
+        const d = await r.json();
+        setTokens(d.accessToken, null);
+        return d.accessToken;
+      }).finally(() => { refreshing = null; });
+    }
+    const newToken = await refreshing;
+    if (newToken) {
+      headers.Authorization = `Bearer ${newToken}`;
+      res = await fetch(`${BASE}${path}`, { ...opts, headers });
+    }
   }
-  return config;
-}, Promise.reject);
 
-// ── Auto refresh on 401
-let isRefreshing = false;
-let failedQueue = [];
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: "Request failed" }));
+    throw new Error(err.message || "Request failed");
+  }
 
-function processQueue(error, token = null) {
-  failedQueue.forEach(({ resolve, reject }) =>
-    error ? reject(error) : resolve(token)
-  );
-  failedQueue = [];
+  // Handle no-content responses
+  const text = await res.text();
+  return text ? JSON.parse(text) : {};
 }
 
-api.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const original = error.config;
-    if (error.response?.status === 401 && !original._retry) {
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        }).then((token) => {
-          original.headers.Authorization = `Bearer ${token}`;
-          return api(original);
-        });
-      }
-
-      original._retry = true;
-      isRefreshing = true;
-
-      const refreshToken = localStorage.getItem("refreshToken");
-      if (!refreshToken) {
-        isRefreshing = false;
-        window.location.href = "/login";
-        return Promise.reject(error);
-      }
-
-      try {
-        const { data } = await axios.post(`${API_URL}/api/auth/refresh-token`, { refreshToken });
-        localStorage.setItem("accessToken", data.accessToken);
-        processQueue(null, data.accessToken);
-        original.headers.Authorization = `Bearer ${data.accessToken}`;
-        return api(original);
-      } catch (refreshError) {
-        processQueue(refreshError, null);
-        localStorage.clear();
-        window.location.href = "/login";
-        return Promise.reject(refreshError);
-      } finally {
-        isRefreshing = false;
-      }
-    }
-    return Promise.reject(error);
+// ── File upload (multipart) ───────────────────────────────────────────────────
+async function apiUpload(path, formData) {
+  const token = getToken();
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: "Upload failed" }));
+    throw new Error(err.message || "Upload failed");
   }
-);
+  return res.json();
+}
 
-// ─────────────────────────────────────────────────────────────
-// AUTH
-// ─────────────────────────────────────────────────────────────
-export const authAPI = {
-  signupStudent: (data) => api.post("/api/auth/signup-student", data),
-  signupHost:    (data) => api.post("/api/auth/signup-host", data),
-  login:         (data) => api.post("/api/auth/login", data),
-  logout:        (data) => api.post("/api/auth/logout", data),
-  refresh:       (token) => api.post("/api/auth/refresh-token", { refreshToken: token }),
+// ── AUTH ──────────────────────────────────────────────────────────────────────
+export const auth = {
+  signupStudent: (data) => apiFetch("/api/auth/signup-student", { method: "POST", body: JSON.stringify(data) }),
+  signupHost:    (data) => apiFetch("/api/auth/signup-host",    { method: "POST", body: JSON.stringify(data) }),
+  login:         (data) => apiFetch("/api/auth/login",          { method: "POST", body: JSON.stringify(data) }),
+  logout:        ()     => apiFetch("/api/auth/logout",         { method: "POST", body: JSON.stringify({ refreshToken: getRefresh(), role: getUser()?.role }) }),
 };
 
-// ─────────────────────────────────────────────────────────────
-// HOSTELS (public)
-// ─────────────────────────────────────────────────────────────
-export const hostelAPI = {
-  list:       (params) => api.get("/api/hostels", { params }),
-  detail:     (id)     => api.get(`/api/hostels/${id}`),
-  rooms:      (id)     => api.get(`/api/hostels/${id}/rooms`),
-  addView:    (id)     => api.post("/api/hostels/increment-views", { hostelId: id }),
+// ── HOSTELS (public) ──────────────────────────────────────────────────────────
+export const hostels = {
+  list:   (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return apiFetch(`/api/hostels${q ? `?${q}` : ""}`);
+  },
+  detail: (id)   => apiFetch(`/api/hostels/${id}`),
+  rooms:  (id)   => apiFetch(`/api/hostels/${id}/rooms`),
 };
 
-// ─────────────────────────────────────────────────────────────
-// STUDENT
-// ─────────────────────────────────────────────────────────────
-export const studentAPI = {
-  me:             ()       => api.get("/api/students/me"),
-  updateProfile:  (data)   => api.put("/api/students/update-profile", data),
-  changePassword: (data)   => api.put("/api/students/change-password", data),
-  savedHostels:   ()       => api.get("/api/students/saved-hostels"),
-  saveHostel:     (id)     => api.post("/api/students/save-hostel", { hostelId: id }),
+// ── STUDENT ───────────────────────────────────────────────────────────────────
+export const student = {
+  me:            ()         => apiFetch("/api/students/me"),
+  updateProfile: (data)     => apiFetch("/api/students/update-profile",  { method: "PUT",  body: JSON.stringify(data) }),
+  changePassword:(data)     => apiFetch("/api/students/change-password", { method: "PUT",  body: JSON.stringify(data) }),
+  saveHostel:    (hostelId) => apiFetch("/api/students/save-hostel",     { method: "POST", body: JSON.stringify({ hostelId }) }),
+  trackView:     (hostelId) => apiFetch(`/api/students/track-view/${hostelId}`, { method: "POST" }),
+  bookings:      ()         => apiFetch("/api/students/bookings"),
+  sendMessage:   (data)     => apiFetch("/api/messages",                 { method: "POST", body: JSON.stringify(data) }),
+  inbox:         ()         => apiFetch("/api/messages/inbox"),
+  conversation:  (userId)   => apiFetch(`/api/messages/conversation/${userId}`),
+  book:          (data)     => apiFetch("/api/bookings",                 { method: "POST", body: JSON.stringify(data) }),
 };
 
-// ─────────────────────────────────────────────────────────────
-// HOST
-// ─────────────────────────────────────────────────────────────
-export const hostAPI = {
-  me:           ()         => api.get("/api/hosts/me"),
-  myHostels:    ()         => api.get("/api/hosts/my-hostels"),
-  addHostel:    (formData) => api.post("/api/hosts/add-hostel", formData, {
-    headers: { "Content-Type": "multipart/form-data" },
-  }),
-  updateHostel: (id, data) => api.put(`/api/hosts/update-hostel/${id}`, data),
-  deleteHostel: (id)       => api.delete(`/api/hosts/delete-hostel/${id}`),
-  addRoom:      (data)     => api.post("/api/hosts/rooms", data),
-  updateRoom:   (id, data) => api.put(`/api/hosts/rooms/${id}`, data),
+// ── HOST ──────────────────────────────────────────────────────────────────────
+export const host = {
+  me:             ()              => apiFetch("/api/hosts/me"),
+  myData:         ()              => apiFetch("/api/hosts/my-hostels"),
+  updateProfile:  (data)          => apiFetch("/api/hosts/update-profile",  { method: "PUT", body: JSON.stringify(data) }),
+  changePassword: (data)          => apiFetch("/api/hosts/change-password", { method: "PUT", body: JSON.stringify(data) }),
+  addHostel:      (formData)      => apiUpload("/api/hosts/add-hostel", formData),
+  updateHostel:   (id, data)      => apiFetch(`/api/hosts/hostels/${id}`,   { method: "PUT", body: JSON.stringify(data) }),
+  bookings:       ()              => apiFetch("/api/hosts/bookings"),
+  updateBooking:  (id, status)    => apiFetch(`/api/hosts/bookings/${id}`,  { method: "PUT", body: JSON.stringify({ status }) }),
+  addRoom:        (data)          => apiFetch("/api/hosts/rooms",            { method: "POST", body: JSON.stringify(data) }),
+  updateRoom:     (id, data)      => apiFetch(`/api/hosts/rooms/${id}`,     { method: "PUT", body: JSON.stringify(data) }),
+  messages:       ()              => apiFetch("/api/hosts/messages"),
+  sendMessage:    (data)          => apiFetch("/api/hosts/messages",         { method: "POST", body: JSON.stringify(data) }),
+  conversation:   (userId)        => apiFetch(`/api/messages/conversation/${userId}`),
 };
 
-// ─────────────────────────────────────────────────────────────
-// BOOKINGS
-// ─────────────────────────────────────────────────────────────
-export const bookingAPI = {
-  create:        (data)         => api.post("/api/bookings", data),
-  myBookings:    ()             => api.get("/api/bookings/student/me"),
-  hostBookings:  ()             => api.get("/api/bookings/host/me"),
-  updateStatus:  (id, status)   => api.put(`/api/bookings/${id}/status`, { status }),
+// ── ADMIN ─────────────────────────────────────────────────────────────────────
+export const admin = {
+  dashboard:     ()        => apiFetch("/api/admin/dashboard"),
+  pendingHostels:()        => apiFetch("/api/admin/hostels/pending"),
+  allHostels:    (params)  => { const q = new URLSearchParams(params || {}).toString(); return apiFetch(`/api/admin/hostels${q ? `?${q}` : ""}`); },
+  hostelDetail:  (id)      => apiFetch(`/api/admin/hostels/${id}`),
+  approve:       (id)      => apiFetch(`/api/admin/hostels/${id}/approve`, { method: "PUT" }),
+  reject:        (id, reason) => apiFetch(`/api/admin/hostels/${id}/reject`, { method: "PUT", body: JSON.stringify({ reason }) }),
+  feature:       (id)      => apiFetch(`/api/admin/hostels/${id}/feature`, { method: "PUT" }),
+  removeHostel:  (id)      => apiFetch(`/api/admin/hostels/${id}`,         { method: "DELETE" }),
+  students:      (search)  => apiFetch(`/api/admin/students${search ? `?search=${search}` : ""}`),
+  removeStudent: (id)      => apiFetch(`/api/admin/students/${id}`,        { method: "DELETE" }),
+  hosts:         (search)  => apiFetch(`/api/admin/hosts${search ? `?search=${search}` : ""}`),
+  verifyHost:    (id)      => apiFetch(`/api/admin/hosts/${id}/verify`,    { method: "PUT" }),
+  removeHost:    (id)      => apiFetch(`/api/admin/hosts/${id}`,           { method: "DELETE" }),
+  payments:      ()        => apiFetch("/api/admin/payments"),
 };
 
-// ─────────────────────────────────────────────────────────────
-// MESSAGES
-// ─────────────────────────────────────────────────────────────
-export const messageAPI = {
-  send:           (data)   => api.post("/api/messages", data),
-  conversation:   (userId) => api.get(`/api/messages/conversation/${userId}`),
-  inbox:          ()       => api.get("/api/messages/inbox"),
-  unreadCount:    ()       => api.get("/api/messages/unread-count"),
+// ── PAYMENTS ──────────────────────────────────────────────────────────────────
+export const payments = {
+  verify:  (data) => apiFetch("/api/payments/verify",  { method: "POST", body: JSON.stringify(data) }),
+  history: ()     => apiFetch("/api/payments/history"),
 };
 
-// ─────────────────────────────────────────────────────────────
-// ADMIN
-// ─────────────────────────────────────────────────────────────
-export const adminAPI = {
-  dashboard:      ()       => api.get("/api/admin/dashboard"),
-  pendingHostels: ()       => api.get("/api/admin/hostels/pending"),
-  allHostels:     (status) => api.get("/api/admin/hostels", { params: { status } }),
-  approve:        (id)     => api.put(`/api/admin/hostels/${id}/approve`),
-  reject:         (id, r)  => api.put(`/api/admin/hostels/${id}/reject`, { reason: r }),
-  feature:        (id)     => api.put(`/api/admin/hostels/${id}/feature`),
-  students:       ()       => api.get("/api/admin/students"),
-  hosts:          ()       => api.get("/api/admin/hosts"),
-};
-
-export default api;
+export { getUser, clearAuth, setTokens };

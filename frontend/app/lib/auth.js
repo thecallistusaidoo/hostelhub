@@ -5,7 +5,7 @@
 
 import { createContext, useContext, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { authAPI } from "./api";
+import { auth } from "./api";
 
 const AuthContext = createContext(null);
 
@@ -25,7 +25,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = async (email, password) => {
-    const { data } = await authAPI.login({ email, password });
+    const data = await auth.login({ email, password });
     localStorage.setItem("accessToken", data.accessToken);
     localStorage.setItem("refreshToken", data.refreshToken);
     localStorage.setItem("user", JSON.stringify(data.user));
@@ -34,8 +34,8 @@ export function AuthProvider({ children }) {
   };
 
   const signup = async (role, formData) => {
-    const fn = role === "student" ? authAPI.signupStudent : authAPI.signupHost;
-    const { data } = await fn(formData);
+    const fn = role === "student" ? auth.signupStudent : auth.signupHost;
+    const data = await fn(formData);
     localStorage.setItem("accessToken", data.accessToken);
     localStorage.setItem("refreshToken", data.refreshToken);
     localStorage.setItem("user", JSON.stringify(data.user));
@@ -47,7 +47,7 @@ export function AuthProvider({ children }) {
     const refreshToken = localStorage.getItem("refreshToken");
     const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
     try {
-      await authAPI.logout({ refreshToken, role: storedUser.role });
+      await auth.logout({ refreshToken, role: storedUser.role });
     } catch (_) {}
     localStorage.clear();
     setUser(null);

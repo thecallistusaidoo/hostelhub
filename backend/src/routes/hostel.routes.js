@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { Hostel, Room } = require("../models");
+const mongoose = require("mongoose");
 const { protect } = require("../middleware");
 
 // GET /api/hostels — browse all approved hostels with filtering
@@ -46,6 +47,12 @@ router.get("/", async (req, res, next) => {
       Hostel.countDocuments(query),
     ]);
 
+    // Add availableRooms to each hostel
+    for (const h of hostels) {
+      const availableCount = await Room.countDocuments({ hostelId: h._id, status: "available" });
+      h.availableRooms = availableCount;
+    }
+
     res.json({
       hostels,
       total,
@@ -58,6 +65,9 @@ router.get("/", async (req, res, next) => {
 // GET /api/hostels/:id — single hostel detail
 router.get("/:id", async (req, res, next) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(404).json({ message: "Hostel not found." });
+    }
     const hostel = await Hostel.findOne({ _id: req.params.id, status: "approved" })
       .populate("ownerId", "fullName phone email hostRating");
     if (!hostel) return res.status(404).json({ message: "Hostel not found." });
@@ -70,6 +80,9 @@ router.get("/:id", async (req, res, next) => {
 // GET /api/hostels/:id/rooms
 router.get("/:id/rooms", async (req, res, next) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(404).json({ message: "Hostel not found." });
+    }
     const rooms = await Room.find({ hostelId: req.params.id });
     res.json({ rooms });
   } catch (err) { next(err); }

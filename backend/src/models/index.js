@@ -1,9 +1,7 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 
-// ─────────────────────────────────────────────────────────────
-// STUDENT MODEL
-// ─────────────────────────────────────────────────────────────
+// ─── STUDENT ─────────────────────────────────────────────────────────────────
 const studentSchema = new mongoose.Schema({
   firstName:    { type: String, required: true, trim: true },
   lastName:     { type: String, required: true, trim: true },
@@ -14,6 +12,8 @@ const studentSchema = new mongoose.Schema({
   program:      { type: String, required: true },
   year:         { type: String, enum: ["L100","L200","L300","L400"], required: true },
   savedHostels: [{ type: mongoose.Schema.Types.ObjectId, ref: "Hostel" }],
+  recentViews:  [{ type: mongoose.Schema.Types.ObjectId, ref: "Hostel" }], // last 10
+  avatar:       { type: String, default: "" },
   role:         { type: String, default: "student" },
   refreshToken: { type: String, select: false },
 }, { timestamps: true });
@@ -23,13 +23,11 @@ studentSchema.pre("save", async function (next) {
   this.password = await bcrypt.hash(this.password, 12);
   next();
 });
-studentSchema.methods.comparePassword = async function (plain) {
+studentSchema.methods.comparePassword = function (plain) {
   return bcrypt.compare(plain, this.password);
 };
 
-// ─────────────────────────────────────────────────────────────
-// HOST MODEL
-// ─────────────────────────────────────────────────────────────
+// ─── HOST ─────────────────────────────────────────────────────────────────────
 const hostSchema = new mongoose.Schema({
   fullName:     { type: String, required: true, trim: true },
   email:        { type: String, required: true, unique: true, lowercase: true, trim: true },
@@ -37,6 +35,14 @@ const hostSchema = new mongoose.Schema({
   password:     { type: String, required: true, minlength: 8, select: false },
   hostelIds:    [{ type: mongoose.Schema.Types.ObjectId, ref: "Hostel" }],
   verified:     { type: Boolean, default: false },
+  avatar:       { type: String, default: "" },
+  // Payout info
+  payoutMethod:   { type: String, enum: ["bank","momo",""], default: "" },
+  bankName:       { type: String, default: "" },
+  accountNumber:  { type: String, default: "" },
+  accountName:    { type: String, default: "" },
+  momoNetwork:    { type: String, default: "" },
+  momoNumber:     { type: String, default: "" },
   role:         { type: String, default: "host" },
   refreshToken: { type: String, select: false },
 }, { timestamps: true });
@@ -46,78 +52,81 @@ hostSchema.pre("save", async function (next) {
   this.password = await bcrypt.hash(this.password, 12);
   next();
 });
-hostSchema.methods.comparePassword = async function (plain) {
+hostSchema.methods.comparePassword = function (plain) {
   return bcrypt.compare(plain, this.password);
 };
 
-// ─────────────────────────────────────────────────────────────
-// HOSTEL MODEL
-// ─────────────────────────────────────────────────────────────
+// ─── HOSTEL ───────────────────────────────────────────────────────────────────
 const hostelSchema = new mongoose.Schema({
-  ownerId:          { type: mongoose.Schema.Types.ObjectId, ref: "Host", required: true },
-  name:             { type: String, required: true, trim: true },
-  description:      { type: String, required: true },
-  location:         { type: String, required: true }, // "Umat" | "Tarkwa"
-  city:             { type: String, default: "Tarkwa" },
-  address:          { type: String },
-  landmark:         { type: String },
-  ghanaPost:        { type: String },
-  campusDistance:   { type: String },
-  gender:           { type: String, enum: ["Mixed","Male Only","Female Only"], default: "Mixed" },
-  type:             { type: String, default: "Private" },
-  amenities:        [{ type: String }],
-  priceFrom:        { type: Number },
-  priceTo:          { type: Number },
-  images:           [{ type: String }],   // Cloudinary URLs
-  ownershipDocs:    [{ type: String }],   // Cloudinary URLs
-  status:           { type: String, enum: ["pending","approved","rejected"], default: "pending" },
-  isAvailable:      { type: Boolean, default: true },
-  viewsCount:       { type: Number, default: 0 },
-  hostRating:       { type: Number, default: 0 },
-  featured:         { type: Boolean, default: false },
-  rules:            [{ type: String }],
+  ownerId:        { type: mongoose.Schema.Types.ObjectId, ref: "Host", required: true },
+  name:           { type: String, required: true, trim: true },
+  description:    { type: String, required: true },
+  location:       { type: String, required: true },
+  city:           { type: String, default: "Tarkwa" },
+  address:        { type: String, default: "" },
+  landmark:       { type: String, default: "" },
+  ghanaPost:      { type: String, default: "" },
+  campusDistance: { type: String, default: "" },
+  gender:         { type: String, enum: ["Mixed","Male Only","Female Only"], default: "Mixed" },
+  type:           { type: String, default: "Private" },
+  amenities:      [{ type: String }],
+  priceFrom:      { type: Number, default: 0 },
+  priceTo:        { type: Number, default: 0 },
+  images:         [{ type: String }],
+  ownershipDocs:  [{ type: String }],
+  status:         { type: String, enum: ["pending","approved","rejected"], default: "pending" },
+  rejectionReason:{ type: String, default: "" },
+  isAvailable:    { type: Boolean, default: true },
+  viewsCount:     { type: Number, default: 0 },
+  hostRating:     { type: Number, default: 0 },
+  featured:       { type: Boolean, default: false },
+  rules:          [{ type: String }],
 }, { timestamps: true });
 
-// ─────────────────────────────────────────────────────────────
-// ROOM MODEL
-// ─────────────────────────────────────────────────────────────
+// ─── ROOM ─────────────────────────────────────────────────────────────────────
 const roomSchema = new mongoose.Schema({
-  hostelId:         { type: mongoose.Schema.Types.ObjectId, ref: "Hostel", required: true },
-  name:             { type: String, required: true },  // "4 in a Room", "2 in a Room" etc
-  price:            { type: Number, required: true },
-  billing:          { type: String, enum: ["Yearly","Semester"], default: "Yearly" },
-  capacity:         { type: Number, required: true },  // e.g. 4
-  currentOccupancy: { type: Number, default: 0 },
-  bathroom:         { type: String, default: "Shared" },
-  status:           { type: String, enum: ["available","booked","inactive"], default: "available" },
+  hostelId:        { type: mongoose.Schema.Types.ObjectId, ref: "Hostel", required: true },
+  name:            { type: String, required: true },
+  price:           { type: Number, required: true },
+  billing:         { type: String, enum: ["Yearly","Semester"], default: "Yearly" },
+  capacity:        { type: Number, required: true },
+  currentOccupancy:{ type: Number, default: 0 },
+  bathroom:        { type: String, default: "Shared" },
+  status:          { type: String, enum: ["available","booked","inactive"], default: "available" },
 }, { timestamps: true });
 
-roomSchema.virtual("available").get(function () {
-  return this.currentOccupancy < this.capacity;
-});
-
-// ─────────────────────────────────────────────────────────────
-// BOOKING MODEL
-// ─────────────────────────────────────────────────────────────
+// ─── BOOKING ──────────────────────────────────────────────────────────────────
 const bookingSchema = new mongoose.Schema({
-  studentId:  { type: mongoose.Schema.Types.ObjectId, ref: "Student", required: true },
-  hostelId:   { type: mongoose.Schema.Types.ObjectId, ref: "Hostel", required: true },
-  roomId:     { type: mongoose.Schema.Types.ObjectId, ref: "Room" },
-  status:     { type: String, enum: ["pending","approved","rejected"], default: "pending" },
-  message:    { type: String },
+  studentId: { type: mongoose.Schema.Types.ObjectId, ref: "Student", required: true },
+  hostelId:  { type: mongoose.Schema.Types.ObjectId, ref: "Hostel", required: true },
+  roomId:    { type: mongoose.Schema.Types.ObjectId, ref: "Room" },
+  status:    { type: String, enum: ["pending","approved","rejected"], default: "pending" },
+  message:   { type: String, default: "" },
 }, { timestamps: true });
 
-// ─────────────────────────────────────────────────────────────
-// MESSAGE MODEL
-// ─────────────────────────────────────────────────────────────
+// ─── MESSAGE ──────────────────────────────────────────────────────────────────
 const messageSchema = new mongoose.Schema({
-  senderId:   { type: mongoose.Schema.Types.ObjectId, required: true, refPath: "senderModel" },
-  senderModel:{ type: String, enum: ["Student","Host"] },
-  receiverId: { type: mongoose.Schema.Types.ObjectId, required: true, refPath: "receiverModel" },
-  receiverModel:{ type: String, enum: ["Student","Host"] },
-  hostelId:   { type: mongoose.Schema.Types.ObjectId, ref: "Hostel" },
-  body:       { type: String, required: true },
-  read:       { type: Boolean, default: false },
+  senderId:      { type: mongoose.Schema.Types.ObjectId, required: true, refPath: "senderModel" },
+  senderModel:   { type: String, enum: ["Student","Host"], required: true },
+  receiverId:    { type: mongoose.Schema.Types.ObjectId, required: true, refPath: "receiverModel" },
+  receiverModel: { type: String, enum: ["Student","Host"], required: true },
+  hostelId:      { type: mongoose.Schema.Types.ObjectId, ref: "Hostel" },
+  body:          { type: String, required: true },
+  read:          { type: Boolean, default: false },
+}, { timestamps: true });
+
+// ─── PAYMENT ──────────────────────────────────────────────────────────────────
+const paymentSchema = new mongoose.Schema({
+  reference:      { type: String, required: true, unique: true },
+  studentId:      { type: mongoose.Schema.Types.ObjectId, ref: "Student", required: true },
+  hostelId:       { type: mongoose.Schema.Types.ObjectId, ref: "Hostel", required: true },
+  bookingId:      { type: mongoose.Schema.Types.ObjectId, ref: "Booking" },
+  roomName:       { type: String },
+  amountPaid:     { type: Number, required: true },
+  platformFee:    { type: Number, required: true },
+  hostPayout:     { type: Number, required: true },
+  paystackStatus: { type: String, enum: ["pending","success","failed"], default: "pending" },
+  settled:        { type: Boolean, default: false },
 }, { timestamps: true });
 
 module.exports = {
@@ -127,4 +136,5 @@ module.exports = {
   Room:    mongoose.model("Room",    roomSchema),
   Booking: mongoose.model("Booking", bookingSchema),
   Message: mongoose.model("Message", messageSchema),
+  Payment: mongoose.model("Payment", paymentSchema),
 };

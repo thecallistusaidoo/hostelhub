@@ -8,23 +8,25 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// ── Hostel images storage
-const hostelImageStorage = new CloudinaryStorage({
+// ── Combined storage (images + documents in same request)
+// We must accept both `images` and `documents` in one multipart request.
+// Using `.array("images")` would reject `documents` as "Unexpected field".
+const combinedStorage = new CloudinaryStorage({
   cloudinary,
-  params: {
-    folder: "hostelhub/hostels",
-    allowed_formats: ["jpg","jpeg","png","webp"],
-    transformation: [{ width: 1200, height: 800, crop: "limit", quality: "auto:good" }],
-  },
-});
+  params: (req, file) => {
+    const isImage = file.fieldname === "images";
+    const isDoc = file.fieldname === "documents";
 
-// ── Ownership documents storage (PDF + images)
-const documentStorage = new CloudinaryStorage({
-  cloudinary,
-  params: {
-    folder: "hostelhub/documents",
-    allowed_formats: ["jpg","jpeg","png","pdf"],
-    resource_type: "auto",
+    const folder = isImage ? "hostelhub/hostels" : "hostelhub/documents";
+
+    return {
+      folder,
+      allowed_formats: isImage ? ["jpg", "jpeg", "png", "webp"] : ["jpg", "jpeg", "png", "pdf"],
+      resource_type: isDoc ? "auto" : "image",
+      ...(isImage
+        ? { transformation: [{ width: 1200, height: 800, crop: "limit", quality: "auto:good" }] }
+        : {}),
+    };
   },
 });
 
@@ -35,16 +37,13 @@ const fileFilter = (req, file, cb) => {
   else cb(new Error("Only JPG, PNG, WebP and PDF files are allowed"), false);
 };
 
-const uploadHostelImages = multer({
-  storage: hostelImageStorage,
+const uploadHostelSubmission = multer({
+  storage: combinedStorage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
   fileFilter,
-}).array("images", 10); // max 10 images
+}).fields([
+  { name: "images", maxCount: 10 },
+  { name: "documents", maxCount: 5 },
+]);
 
-const uploadDocuments = multer({
-  storage: documentStorage,
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter,
-}).array("documents", 5); // max 5 documents
-
-module.exports = { cloudinary, uploadHostelImages, uploadDocuments };
+module.exports = { cloudinary, uploadHostelSubmission };

@@ -19,6 +19,7 @@ const messageRoutes = require("./routes/message.routes");
 const adminRoutes = require("./routes/admin.routes");
 const { errorHandler } = require("./middleware/index");
 const { apiLimiter } = require("./middleware/rateLimit.middleware");
+const paymentRoutes = require("./routes/payment.routes");
 
 const app = express();
 
@@ -29,9 +30,9 @@ app.use(helmet());
 
 // ── CORS — allow configured origins + local dev ports
 const configuredOrigins = (process.env.FRONTEND_URL || "http://localhost:3000")
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
+.split(",")
+.map((origin) => origin.trim())
+.filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -70,6 +71,7 @@ app.use("/api/hostels", hostelRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/payments", paymentRoutes);
 
 // ── Health check
 app.get("/api/health", (req, res) => res.json({ status: "ok", env: process.env.NODE_ENV }));
@@ -87,18 +89,19 @@ async function start() {
   try {
     await mongoose.connect(process.env.MONGODB_URI);
     console.log("✅ MongoDB connected");
-
+    
     const httpServer = http.createServer(app);
     attachSocket(httpServer);
-
+    
     httpServer.listen(PORT, () =>
       console.log(`🚀 Server + Socket.io on port ${PORT}`)
-    );
-  } catch (err) {
-    console.error("❌ DB connection failed:", err.message);
-    process.exit(1);
-  }
+  );
+} catch (err) {
+  console.error("❌ DB connection failed:", err.message);
+  process.exit(1);
 }
+}
+
 
 start();
 

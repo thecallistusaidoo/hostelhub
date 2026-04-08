@@ -1,154 +1,116 @@
 "use client";
 import { useState } from "react";
 
-const AMENITIES = ["WiFi", "Water", "Electricity", "Generator", "Kitchen", "Security", "AC", "Laundry", "Parking"];
-const ROOM_TYPES = ["1 in a Room", "2 in a Room", "4 in a Room"];
-const LOCATIONS = ["All", "Umat", "Tarkwa"];
-const GENDERS = ["All", "Mixed", "Male Only", "Female Only"];
-const SORT_OPTIONS = ["Newest", "Lowest Price", "Highest Rated", "Most Viewed"];
+const AMENITIES = ["WiFi","Water","Electricity","Generator","Kitchen","Security","AC","Laundry","Parking","Wardrobe"];
+const LOCATIONS = ["All","Umat","Tarkwa"];
+const GENDERS   = ["All","Mixed","Male Only","Female Only"];
+const SORT_OPT  = ["Newest","Lowest Price","Highest Price","Highest Rated","Most Viewed"];
 
-export default function FilterSidebar({ filters, setFilters, onClose }) {
-  const toggle = (key, val) => {
+export default function FilterSidebar({ filters, setFilters }) {
+  const [collapsed, setCollapsed] = useState({});
+  const toggle = (k, v) => {
     setFilters(f => {
-      const arr = f[key] || [];
-      return {
-        ...f,
-        [key]: arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val],
-      };
+      const arr = f[k] || [];
+      return { ...f, [k]: arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v] };
     });
   };
+  const toggleSection = (s) => setCollapsed(p => ({...p, [s]: !p[s]}));
+
+  const Section = ({ id, title, children }) => (
+    <div className="border-b border-white/20 dark:border-white/08 last:border-0 pb-4 mb-4 last:mb-0 last:pb-0">
+      <button onClick={() => toggleSection(id)}
+        className="flex items-center justify-between w-full text-left mb-3 group">
+        <span className="text-xs font-bold text-[--text-primary] uppercase tracking-widest group-hover:text-[#1E40AF] dark:group-hover:text-blue-300 transition-colors">
+          {title}
+        </span>
+        <svg className={`w-4 h-4 text-[--text-muted] transition-transform duration-200 ${collapsed[id] ? "" : "rotate-180"}`}
+          fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
+        </svg>
+      </button>
+      {!collapsed[id] && <div className="animate-fade-up">{children}</div>}
+    </div>
+  );
+
+  const Pill = ({ label, active, onClick }) => (
+    <button onClick={onClick}
+      className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all duration-150 ${
+        active
+          ? "text-white border-[#1E40AF]"
+          : "border-white/30 dark:border-white/10 text-[--text-secondary] hover:border-[#1E40AF] hover:text-[#1E40AF] dark:hover:text-blue-300"
+      }`}
+      style={active ? {background:"linear-gradient(135deg,#1E40AF,#2563EB)",boxShadow:"0 2px 8px rgba(30,64,175,0.30)"} : {}}>
+      {label}
+    </button>
+  );
+
+  const reset = () => setFilters({ location:"All", gender:"All", amenities:[], minPrice:0, maxPrice:10000, sort:"Newest" });
+  const activeCount = (filters.location !== "All" ? 1 : 0) + (filters.gender !== "All" ? 1 : 0) +
+    filters.amenities.length + (filters.minPrice > 0 || filters.maxPrice < 10000 ? 1 : 0);
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h3 className="font-bold text-gray-800 text-base">Filters</h3>
-        <button
-          onClick={() => setFilters({ location: "All", gender: "All", amenities: [], roomTypes: [], minPrice: 0, maxPrice: 10000, sort: "Newest" })}
-          className="text-xs text-[#1E40AF] font-semibold hover:underline"
-        >
-          Clear all
-        </button>
+    <div className="glass rounded-2xl p-5">
+      <div className="flex items-center justify-between mb-5">
+        <h3 className="font-bold text-[--text-primary] text-sm flex items-center gap-2">
+          <svg className="w-4 h-4 text-[#1E40AF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
+          </svg>
+          Filters
+          {activeCount > 0 && (
+            <span className="badge-blue">{activeCount}</span>
+          )}
+        </h3>
+        {activeCount > 0 && (
+          <button onClick={reset} className="text-xs text-[#1E40AF] dark:text-blue-300 font-semibold hover:underline">
+            Clear all
+          </button>
+        )}
       </div>
 
-      {/* Sort */}
-      <div>
-        <p className="text-sm font-semibold text-gray-700 mb-2">Sort by</p>
-        <select
-          value={filters.sort}
-          onChange={e => setFilters(f => ({...f, sort: e.target.value}))}
-          className="input-field text-sm"
-        >
-          {SORT_OPTIONS.map(o => <option key={o}>{o}</option>)}
+      <Section id="sort" title="Sort By">
+        <select value={filters.sort} onChange={e => setFilters(f => ({...f, sort:e.target.value}))}
+          className="input-field text-xs">
+          {SORT_OPT.map(o => <option key={o}>{o}</option>)}
         </select>
-      </div>
+      </Section>
 
-      {/* Location */}
-      <div>
-        <p className="text-sm font-semibold text-gray-700 mb-2">Location</p>
+      <Section id="location" title="Location">
         <div className="flex flex-wrap gap-2">
-          {LOCATIONS.map(loc => (
-            <button
-              key={loc}
-              onClick={() => setFilters(f => ({...f, location: loc}))}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                filters.location === loc
-                  ? "bg-[#1E40AF] text-white border-[#1E40AF]"
-                  : "bg-white text-gray-600 border-gray-200 hover:border-[#1E40AF]"
-              }`}
-            >
-              {loc}
-            </button>
-          ))}
+          {LOCATIONS.map(l => <Pill key={l} label={l === "All" ? "🏘 All" : l === "Umat" ? "🎓 Near UMaT" : "🏙 Tarkwa"} active={filters.location === l} onClick={() => setFilters(f => ({...f, location:l}))}/>)}
         </div>
-      </div>
+      </Section>
 
-      {/* Gender */}
-      <div>
-        <p className="text-sm font-semibold text-gray-700 mb-2">Gender</p>
+      <Section id="gender" title="Gender">
         <div className="flex flex-wrap gap-2">
-          {GENDERS.map(g => (
-            <button
-              key={g}
-              onClick={() => setFilters(f => ({...f, gender: g}))}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                filters.gender === g
-                  ? "bg-[#1E40AF] text-white border-[#1E40AF]"
-                  : "bg-white text-gray-600 border-gray-200 hover:border-[#1E40AF]"
-              }`}
-            >
-              {g}
-            </button>
-          ))}
+          {GENDERS.map(g => <Pill key={g} label={g} active={filters.gender === g} onClick={() => setFilters(f => ({...f, gender:g}))}/>)}
         </div>
-      </div>
+      </Section>
 
-      {/* Price range */}
-      <div>
-        <p className="text-sm font-semibold text-gray-700 mb-2">
-          Price Range: <span className="text-[#1E40AF]">GH₵{filters.minPrice.toLocaleString()} – GH₵{filters.maxPrice.toLocaleString()}</span>
+      <Section id="price" title="Price Range">
+        <p className="text-xs text-[--text-muted] mb-3">
+          GH₵{filters.minPrice.toLocaleString()} – GH₵{filters.maxPrice.toLocaleString()}
         </p>
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            <span>Min</span>
-            <input
-              type="range" min={0} max={10000} step={100}
-              value={filters.minPrice}
-              onChange={e => setFilters(f => ({...f, minPrice: Number(e.target.value)}))}
-              className="flex-1 accent-[#1E40AF]"
-            />
-            <span>GH₵{filters.minPrice.toLocaleString()}</span>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            <span>Max</span>
-            <input
-              type="range" min={0} max={10000} step={100}
-              value={filters.maxPrice}
-              onChange={e => setFilters(f => ({...f, maxPrice: Number(e.target.value)}))}
-              className="flex-1 accent-[#1E40AF]"
-            />
-            <span>GH₵{filters.maxPrice.toLocaleString()}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Room Types */}
-      <div>
-        <p className="text-sm font-semibold text-gray-700 mb-2">Room Type</p>
-        <div className="flex flex-col gap-2">
-          {ROOM_TYPES.map(rt => (
-            <label key={rt} className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={(filters.roomTypes || []).includes(rt)}
-                onChange={() => toggle("roomTypes", rt)}
-                className="accent-[#1E40AF] w-4 h-4 rounded"
-              />
-              <span className="text-sm text-gray-700">{rt}</span>
-            </label>
+        <div className="space-y-3">
+          {[["Min","minPrice",0],["Max","maxPrice",10000]].map(([l,k,def]) => (
+            <div key={k} className="flex items-center gap-2">
+              <span className="text-xs text-[--text-muted] w-8">{l}</span>
+              <input type="range" min={0} max={10000} step={100}
+                value={filters[k]}
+                onChange={e => setFilters(f => ({...f, [k]:Number(e.target.value)}))}
+                className="flex-1 accent-[#1E40AF] h-1 rounded-full"/>
+              <span className="text-xs text-[--text-muted] w-14 text-right">GH₵{Number(filters[k]).toLocaleString()}</span>
+            </div>
           ))}
         </div>
-      </div>
+      </Section>
 
-      {/* Amenities */}
-      <div>
-        <p className="text-sm font-semibold text-gray-700 mb-2">Amenities</p>
+      <Section id="amenities" title="Amenities">
         <div className="flex flex-wrap gap-2">
           {AMENITIES.map(a => (
-            <button
-              key={a}
-              onClick={() => toggle("amenities", a)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                (filters.amenities || []).includes(a)
-                  ? "bg-[#1E40AF] text-white border-[#1E40AF]"
-                  : "bg-white text-gray-600 border-gray-200 hover:border-[#1E40AF]"
-              }`}
-            >
-              {a}
-            </button>
+            <Pill key={a} label={a} active={(filters.amenities||[]).includes(a)} onClick={() => toggle("amenities", a)}/>
           ))}
         </div>
-      </div>
+      </Section>
     </div>
   );
 }

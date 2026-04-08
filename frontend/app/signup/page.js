@@ -60,44 +60,44 @@ export default function SignupPage() {
 
   // Step 0 — choose role
   if (!role) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center px-4 transition-colors duration-300">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <Link href="/" className="font-extrabold text-3xl text-[#1E40AF]" style={{fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
             Hostel<span className="text-[#F59E0B]">Hub</span>
           </Link>
-          <p className="text-gray-400 text-sm mt-1">Create your free account</p>
+          <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">Create your free account</p>
         </div>
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-          <h1 className="text-xl font-extrabold text-gray-900 mb-2" style={{fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-8 transition-colors duration-300">
+          <h1 className="text-xl font-extrabold text-gray-900 dark:text-white mb-2" style={{fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
             I am a...
           </h1>
-          <p className="text-gray-400 text-sm mb-6">Choose your account type to get started.</p>
+          <p className="text-gray-400 dark:text-gray-500 text-sm mb-6">Choose your account type to get started.</p>
           <div className="grid grid-cols-2 gap-4">
             <button
               onClick={() => setRole("student")}
-              className="flex flex-col items-center gap-3 p-6 rounded-2xl border-2 border-gray-100 hover:border-[#1E40AF] hover:bg-blue-50 transition group"
+              className="flex flex-col items-center gap-3 p-6 rounded-2xl border-2 border-gray-100 dark:border-gray-700 hover:border-[#1E40AF] hover:bg-blue-50 dark:hover:bg-blue-900/20 transition group"
             >
               <span className="text-4xl">🎓</span>
               <div className="text-center">
-                <p className="font-bold text-gray-800 group-hover:text-[#1E40AF]">Student</p>
-                <p className="text-xs text-gray-400 mt-0.5">Find & book a hostel</p>
+                <p className="font-bold text-gray-800 dark:text-gray-200 group-hover:text-[#1E40AF]">Student</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Find & book a hostel</p>
               </div>
             </button>
             <button
               onClick={() => setRole("host")}
-              className="flex flex-col items-center gap-3 p-6 rounded-2xl border-2 border-gray-100 hover:border-[#F59E0B] hover:bg-amber-50 transition group"
+              className="flex flex-col items-center gap-3 p-6 rounded-2xl border-2 border-gray-100 dark:border-gray-700 hover:border-[#F59E0B] hover:bg-amber-50 dark:hover:bg-yellow-900/20 transition group"
             >
               <span className="text-4xl">🏠</span>
               <div className="text-center">
-                <p className="font-bold text-gray-800 group-hover:text-[#F59E0B]">Host</p>
-                <p className="text-xs text-gray-400 mt-0.5">List your hostel</p>
+                <p className="font-bold text-gray-800 dark:text-gray-200 group-hover:text-[#F59E0B]">Host</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">List your hostel</p>
               </div>
             </button>
           </div>
-          <p className="text-center text-sm text-gray-400 mt-6">
+          <p className="text-center text-sm text-gray-400 dark:text-gray-500 mt-6">
             Already have an account?{" "}
-            <Link href="/login" className="text-[#1E40AF] font-semibold hover:underline">Sign in</Link>
+            <Link href="/login" className="text-[#1E40AF] dark:text-blue-400 font-semibold hover:underline">Sign in</Link>
           </p>
         </div>
       </div>
@@ -105,9 +105,9 @@ export default function SignupPage() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex transition-colors duration-300">
       {/* Left panel */}
-      <div className={`hidden lg:flex flex-col w-96 text-white p-10 justify-between ${role === "host" ? "bg-[#1e3a8a]" : "bg-[#1E40AF]"}`}>
+      <div className={`hidden lg:flex flex-col w-96 text-white p-10 justify-between ${role === "host" ? "bg-[#1e3a8a] dark:bg-[#1a2554]" : "bg-[#1E40AF] dark:bg-[#1e3a8a]"} transition-colors duration-300`}>
         <div>
           <Link href="/" className="font-extrabold text-2xl" style={{fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
             Hostel<span className="text-[#F59E0B]">Hub</span>
