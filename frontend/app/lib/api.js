@@ -140,7 +140,12 @@ export const admin = {
   hosts:         (search)  => apiFetch(`/api/admin/hosts${search ? `?search=${search}` : ""}`),
   verifyHost:    (id)      => apiFetch(`/api/admin/hosts/${id}/verify`,    { method: "PUT" }),
   removeHost:    (id)      => apiFetch(`/api/admin/hosts/${id}`,           { method: "DELETE" }),
-  payments:      ()        => apiFetch("/api/admin/payments"),
+  payments:      (params)  => {
+    const q = new URLSearchParams(params || {}).toString();
+    return apiFetch(`/api/admin/payments${q ? `?${q}` : ""}`);
+  },
+  paymentDetail: (id)      => apiFetch(`/api/admin/payments/${id}`),
+  paymentByReference: (reference) => apiFetch(`/api/admin/payments/reference/${encodeURIComponent(reference)}`),
 };
 
 // ── PAYMENTS ──────────────────────────────────────────────────────────────────

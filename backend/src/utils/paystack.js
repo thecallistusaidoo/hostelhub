@@ -157,6 +157,15 @@ async function verifyTransaction(reference) {
   return res.data;
 }
 
+// ── 5b. LIST TRANSACTIONS ──────────────────────────────────────────────────────
+async function listTransactions({ page = 1, perPage = 50 } = {}) {
+  const res = await paystackRequest(
+    "GET",
+    `/transaction?perPage=${Number(perPage)}&page=${Number(page)}`
+  );
+  return res.data || [];
+}
+
 // ── 6. INITIATE TRANSFER (send 95% to host) ───────────────────────────────────
 // Sends money from YOUR Paystack balance to the host's saved recipient.
 // This is called AFTER you've verified the student's payment.
@@ -206,6 +215,7 @@ module.exports = {
   createMoMoRecipient,
   initializeTransaction,
   verifyTransaction,
+  listTransactions,
   initiateTransfer,
   verifyTransfer,
   listBanks,

@@ -27,11 +27,8 @@ export default function PaymentPage() {
   const billing    = queryParams?.get("billing") || "Yearly";
   const hostelName = queryParams?.get("hostelName") || "Hostel";
 
-  const platformFee = Math.round(amount * (PLATFORM_FEE_PERCENT / 100) * 100) / 100;
-  const hostPayout  = amount - platformFee;
-
   const [user, setUser] = useState(null);
-  const [step, setStep] = useState("review"); // "review" | "paying" | "success" | "failed"
+  const [step, setStep] = useState("review"); // "review" | "paying"
   const [reference, setReference] = useState("");
 
   useEffect(() => {
@@ -49,7 +46,7 @@ export default function PaymentPage() {
 
     setStep("paying");
 
-    // First, create a booking if not exists
+    // First, create booking
     try {
       const bookRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/bookings`, {
         method: "POST",
@@ -62,60 +59,30 @@ export default function PaymentPage() {
         setStep("review");
         return;
       }
+      const bookingData = await bookRes.json();
+      const bookingId = bookingData?.booking?._id;
+
+      // Create pending transaction on backend and get Paystack authorization URL
+      const initRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/payments/initialize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
+        body: JSON.stringify({ hostelId, roomId, roomName, amountGHS: amount, bookingId }),
+      });
+
+      const initData = await initRes.json().catch(() => ({}));
+      if (!initRes.ok || !initData?.authorizationUrl) {
+        alert(initData?.message || "Could not initialize payment. Please try again.");
+        setStep("review");
+        return;
+      }
+
+      setReference(initData.reference || "");
+      window.location.href = initData.authorizationUrl;
+      return;
     } catch {
       alert("Failed to create booking. Please try again.");
       setStep("review");
       return;
-    }
-
-    // Load Paystack inline script dynamically
-    const script = document.createElement("script");
-    script.src = "https://js.paystack.co/v1/inline.js";
-    script.onload = () => {
-      // @ts-ignore
-      const handler = window.PaystackPop.setup({
-        key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || "pk_test_xxxxxxxxxxxxxxxxxxxxxxxx",
-        email: user?.email || "student@umat.edu.gh",
-        amount: amount * 100, // Paystack uses pesewas (GH₵1 = 100 pesewas)
-        currency: "GHS",
-        ref: reference,
-        metadata: {
-          hostelId,
-          roomId,
-          hostelName,
-          roomName,
-          studentId: user?.id,
-          platformFeePercent: PLATFORM_FEE_PERCENT,
-          hostPayout,
-        },
-        callback: (response) => {
-          // Payment successful — verify on backend
-          verifyPayment(response.reference);
-        },
-        onClose: () => {
-          setStep("review");
-        },
-      });
-      handler.openIframe();
-    };
-    document.body.appendChild(script);
-  };
-
-  const verifyPayment = async (ref) => {
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/payments/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
-        body: JSON.stringify({ reference: ref, hostelId, roomId, roomName, amount }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setStep("success");
-      } else {
-        setStep("failed");
-      }
-    } catch {
-      setStep("failed");
     }
   };
 
@@ -147,70 +114,6 @@ export default function PaymentPage() {
       </header>
 
       <div className="max-w-2xl mx-auto w-full px-4 py-8 flex-1">
-
-        {/* SUCCESS STATE */}
-        {step === "success" && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center">
-            <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-5">
-              <svg className="w-10 h-10 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/>
-              </svg>
-            </div>
-            <h1 className="text-2xl font-extrabold text-gray-900 mb-2" style={{fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Payment Successful!</h1>
-            <p className="text-gray-500 text-sm leading-relaxed mb-1">Your payment of <strong className="text-[#1E40AF]">GH₵{amount.toLocaleString()}</strong> has been received.</p>
-            <p className="text-gray-400 text-xs mb-6">Reference: <span className="font-mono font-semibold">{reference}</span></p>
-
-            <div className="bg-gray-50 rounded-xl p-4 text-left space-y-2 mb-6">
-              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Payment Summary</p>
-              {[
-                ["Hostel", hostelName],
-                ["Room Type", roomName],
-                ["Billing Period", billing],
-                ["Amount Paid", `GH₵${amount.toLocaleString()}`],
-              ].map(([l,v]) => (
-                <div key={l} className="flex justify-between text-sm">
-                  <span className="text-gray-400">{l}</span>
-                  <span className="font-semibold text-gray-700">{v}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-sm text-[#1E40AF] mb-6 text-left">
-              ✅ The host has been notified. They will contact you within 24 hours to arrange move-in.
-            </div>
-
-            <div className="flex gap-3">
-              <Link href="/student/dashboard" className="flex-1 text-center bg-[#1E40AF] hover:bg-[#1e3a8a] text-white font-bold rounded-xl py-3 transition">
-                Go to Dashboard
-              </Link>
-              <Link href="/" className="flex-1 text-center border border-gray-200 text-gray-600 font-semibold rounded-xl py-3 hover:border-gray-300 transition">
-                Browse More
-              </Link>
-            </div>
-          </div>
-        )}
-
-        {/* FAILED STATE */}
-        {step === "failed" && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center">
-            <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-5">
-              <svg className="w-10 h-10 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/>
-              </svg>
-            </div>
-            <h1 className="text-2xl font-extrabold text-gray-900 mb-2" style={{fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Payment Failed</h1>
-            <p className="text-gray-500 text-sm leading-relaxed mb-6">We couldn't process your payment. Please try again or contact support.</p>
-
-            <div className="flex gap-3">
-              <button onClick={() => setStep("review")} className="flex-1 text-center bg-[#1E40AF] hover:bg-[#1e3a8a] text-white font-bold rounded-xl py-3 transition">
-                Try Again
-              </button>
-              <Link href="/student/dashboard" className="flex-1 text-center border border-gray-200 text-gray-600 font-semibold rounded-xl py-3 hover:border-gray-300 transition">
-                Go to Dashboard
-              </Link>
-            </div>
-          </div>
-        )}
 
         {/* REVIEW + PAY STATE */}
         {(step === "review" || step === "paying") && (

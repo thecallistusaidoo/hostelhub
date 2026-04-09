@@ -22,7 +22,13 @@ router.post("/", protect, restrictTo("student"), validate(bookingSchema), async 
     if (existing) return res.status(400).json({ message: "You already have a pending booking for this hostel." });
 
     const booking = await Booking.create({
-      studentId: req.user.id, hostelId, roomId, message,
+      studentId: req.user.id,
+      hostelId,
+      roomId,
+      message,
+      amount: room.price,
+      currency: "GHS",
+      paymentStatus: "pending",
     });
 
     res.status(201).json({ message: "Booking request sent.", booking });

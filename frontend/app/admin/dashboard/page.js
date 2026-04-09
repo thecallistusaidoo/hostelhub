@@ -545,10 +545,26 @@ function UsersTab({ type }) {
 // ── PAYMENTS ──────────────────────────────────────────────────────────────────
 function PaymentsTab({ stats }) {
   const [payments, setPayments] = useState(null);
+  const [chargeFilter, setChargeFilter] = useState("all");
+  const [selectedPayment, setSelectedPayment] = useState(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
 
   useEffect(() => {
-    adminAPI.payments().then(d => setPayments(d.payments || [])).catch(() => setPayments([]));
-  }, []);
+    const params = {};
+    if (chargeFilter !== "all") params.chargeStatus = chargeFilter;
+    params.includePaystack = "true";
+    adminAPI.payments(params).then(d => setPayments(d.payments || [])).catch(() => setPayments([]));
+  }, [chargeFilter]);
+
+  const openPayment = async (paymentRef) => {
+    try {
+      setLoadingDetail(true);
+      const data = await adminAPI.paymentByReference(paymentRef);
+      setSelectedPayment(data.payment || null);
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
 
   if (payments === null) return <div className="flex justify-center py-20"><Spinner/></div>;
 
@@ -564,6 +580,27 @@ function PaymentsTab({ stats }) {
             <p className={`text-2xl font-extrabold mt-2 ${s.color}`}>{s.v}</p>
             <p className="text-xs text-gray-400 mt-0.5">{s.l}</p>
           </div>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {[
+          { id: "all", label: "All" },
+          { id: "success", label: "Successful Charges" },
+          { id: "pending", label: "Pending Charges" },
+          { id: "failed", label: "Failed Charges" },
+        ].map((opt) => (
+          <button
+            key={opt.id}
+            onClick={() => setChargeFilter(opt.id)}
+            className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition ${
+              chargeFilter === opt.id
+                ? "bg-[#1E40AF] text-white border-[#1E40AF]"
+                : "bg-white text-gray-500 border-gray-200 hover:border-[#1E40AF] hover:text-[#1E40AF]"
+            }`}
+          >
+            {opt.label}
+          </button>
         ))}
       </div>
 
@@ -587,24 +624,60 @@ function PaymentsTab({ stats }) {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {payments.map(p => (
-                  <tr key={p._id} className="hover:bg-gray-50 transition">
+                  <tr key={p._id} className="hover:bg-gray-50 transition cursor-pointer" onClick={() => openPayment(p.reference)}>
                     <td className="px-4 py-3 font-semibold text-gray-800">
-                      {p.studentId?.firstName} {p.studentId?.lastName}
+                      {(p.studentId?.firstName || p.studentId?.lastName) ? `${p.studentId?.firstName || ""} ${p.studentId?.lastName || ""}`.trim() : (p.studentId?.email || "—")}
                     </td>
-                    <td className="px-4 py-3 text-gray-500">{p.hostelId?.name}</td>
+                    <td className="px-4 py-3 text-gray-500">{p.hostelId?.name || "—"}</td>
                     <td className="px-4 py-3 font-bold text-gray-800">GH₵{p.amountPaid?.toLocaleString()}</td>
                     <td className="px-4 py-3 text-emerald-600 font-semibold">GH₵{p.platformFee?.toLocaleString()}</td>
                     <td className="px-4 py-3 text-[#1E40AF] font-semibold">GH₵{p.hostPayout?.toLocaleString()}</td>
                     <td className="px-4 py-3 text-gray-400">{new Date(p.createdAt).toLocaleDateString()}</td>
                     <td className="px-4 py-3">
-                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${p.settled ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
-                        {p.settled ? "✓ Settled" : "⏳ Pending"}
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                        p.paystackChargeStatus === "success" ? "bg-emerald-50 text-emerald-700"
+                          : p.paystackChargeStatus === "failed" ? "bg-red-50 text-red-700"
+                            : "bg-amber-50 text-amber-700"
+                      }`}>
+                        {p.paystackChargeStatus === "success" ? "✓ Charge Success" : p.paystackChargeStatus === "failed" ? "✗ Charge Failed" : "⏳ Charge Pending"}
                       </span>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {loadingDetail && <div className="text-xs text-gray-400">Loading transaction details...</div>}
+
+      {selectedPayment && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-2xl rounded-2xl border border-gray-100 shadow-xl p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-extrabold text-gray-900">Transaction Detail</h3>
+              <button onClick={() => setSelectedPayment(null)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+            <div className="space-y-2 text-sm">
+              <p><span className="text-gray-400">Reference:</span> <span className="font-mono">{selectedPayment.reference}</span></p>
+              <p><span className="text-gray-400">Source:</span> {selectedPayment.source || "platform"}</p>
+              <p><span className="text-gray-400">Student:</span> {(selectedPayment.studentId?.firstName || selectedPayment.studentId?.lastName) ? `${selectedPayment.studentId?.firstName || ""} ${selectedPayment.studentId?.lastName || ""}`.trim() : "—"} ({selectedPayment.studentId?.email || "—"})</p>
+              <p><span className="text-gray-400">Host:</span> {selectedPayment.hostId?.fullName || "—"} ({selectedPayment.hostId?.email || "—"})</p>
+              <p><span className="text-gray-400">Hostel:</span> {selectedPayment.hostelId?.name || "—"}</p>
+              <p><span className="text-gray-400">Amount Paid:</span> GH₵{selectedPayment.amountPaid?.toLocaleString()}</p>
+              <p><span className="text-gray-400">Platform Fee:</span> GH₵{selectedPayment.platformFee?.toLocaleString()}</p>
+              <p><span className="text-gray-400">Host Payout:</span> GH₵{selectedPayment.hostPayout?.toLocaleString()}</p>
+              <p><span className="text-gray-400">Charge Status:</span> {selectedPayment.paystackChargeStatus}</p>
+              <p><span className="text-gray-400">Charge Failure Reason:</span> {selectedPayment.chargeFailureReason || "—"}</p>
+              <p><span className="text-gray-400">Gateway Response:</span> {selectedPayment.paystackGatewayResponse || "—"}</p>
+              <p><span className="text-gray-400">Transfer Status:</span> {selectedPayment.transferStatus || "—"}</p>
+              <p><span className="text-gray-400">Transfer Failure Reason:</span> {selectedPayment.transferFailureReason || "—"}</p>
+              <p><span className="text-gray-400">Transfer Code:</span> {selectedPayment.transferCode || "—"}</p>
+              <p><span className="text-gray-400">Booking ID:</span> {selectedPayment.bookingId?._id || "—"}</p>
+              <p><span className="text-gray-400">Booking Payment Status:</span> {selectedPayment.bookingId?.paymentStatus || "—"}</p>
+              <p><span className="text-gray-400">Created:</span> {new Date(selectedPayment.createdAt).toLocaleString()}</p>
+            </div>
           </div>
         </div>
       )}

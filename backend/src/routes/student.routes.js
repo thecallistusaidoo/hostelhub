@@ -88,14 +88,14 @@ router.get("/bookings", async (req, res, next) => {
 
     // For paid bookings, attach payment info
     for (const booking of bookings) {
-      if (booking.status === "paid" && booking.paymentReference) {
-        const payment = await Payment.findOne({ reference: booking.paymentReference });
+      if (booking.status === "paid" && booking.paymentRef) {
+        const payment = await Payment.findOne({ reference: booking.paymentRef });
         if (payment) {
           booking.payment = {
             amountPaid: payment.amountPaid,
             platformFee: payment.platformFee,
             hostPayout: payment.hostPayout,
-            paystackStatus: payment.paystackStatus,
+            paystackStatus: payment.paystackChargeStatus,
           };
         }
       }

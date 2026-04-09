@@ -81,6 +81,7 @@ router.post("/initialize", protect, restrictTo("student"), async (req, res, next
       platformFee,
       hostPayout,
       paystackChargeStatus: "pending",
+      currency: "GHS",
     });
 
     res.json({
@@ -122,7 +123,17 @@ router.post("/verify", protect, async (req, res, next) => {
 
     if (txData.status !== "success") {
       payment.paystackChargeStatus = "failed";
+      payment.chargeFailureReason = txData.gateway_response || txData.status || "Payment failed";
+      payment.paystackGatewayResponse = txData.gateway_response || "";
+      payment.paystackChannel = txData.channel || "";
       await payment.save();
+      if (payment.bookingId) {
+        await Booking.findByIdAndUpdate(payment.bookingId, {
+          paymentStatus: "failed",
+          paymentFailureReason: payment.chargeFailureReason,
+          paymentRef: reference,
+        });
+      }
       return res.status(400).json({ message: `Payment not successful. Status: ${txData.status}` });
     }
 
@@ -136,6 +147,10 @@ router.post("/verify", protect, async (req, res, next) => {
 
     // Mark charge as successful
     payment.paystackChargeStatus = "success";
+    payment.paystackGatewayResponse = txData.gateway_response || "";
+    payment.paystackChannel = txData.channel || "";
+    payment.paidAt = txData.paid_at ? new Date(txData.paid_at) : new Date();
+    payment.chargeFailureReason = "";
     await payment.save();
 
     // Update booking to "paid" if linked
@@ -143,6 +158,10 @@ router.post("/verify", protect, async (req, res, next) => {
       await Booking.findByIdAndUpdate(payment.bookingId, {
         status: "paid",
         paymentRef: reference,
+        amount: payment.amountPaid,
+        currency: payment.currency || "GHS",
+        paymentStatus: "success",
+        paymentFailureReason: "",
       });
     }
 
@@ -234,12 +253,21 @@ router.post(
         if (!payment || payment.paystackChargeStatus === "success") return;
 
         payment.paystackChargeStatus = "success";
+        payment.paystackGatewayResponse = event.data.gateway_response || "";
+        payment.paystackChannel = event.data.channel || "";
+        payment.paidAt = event.data.paid_at ? new Date(event.data.paid_at) : new Date();
+        payment.chargeFailureReason = "";
         await payment.save();
 
         // If booking exists, mark as paid
         if (payment.bookingId) {
           await Booking.findByIdAndUpdate(payment.bookingId, {
-            status: "paid", paymentRef: reference,
+            status: "paid",
+            paymentRef: reference,
+            amount: payment.amountPaid,
+            currency: payment.currency || "GHS",
+            paymentStatus: "success",
+            paymentFailureReason: "",
           });
         }
 
@@ -269,8 +297,28 @@ router.post(
           } catch (transferErr) {
             console.error("❌ Transfer failed:", transferErr.message);
             payment.transferStatus = "failed";
+            payment.transferFailureReason = transferErr.message || "Transfer initiation failed";
             await payment.save();
           }
+        }
+      }
+
+      // ── EVENT: charge.failed ──────────────────────────────────────────
+      if (event.event === "charge.failed") {
+        const { reference, gateway_response, channel } = event.data;
+        const payment = await Payment.findOne({ reference });
+        if (!payment) return;
+        payment.paystackChargeStatus = "failed";
+        payment.paystackGatewayResponse = gateway_response || "";
+        payment.paystackChannel = channel || "";
+        payment.chargeFailureReason = gateway_response || "Payment failed";
+        await payment.save();
+        if (payment.bookingId) {
+          await Booking.findByIdAndUpdate(payment.bookingId, {
+            paymentStatus: "failed",
+            paymentFailureReason: payment.chargeFailureReason,
+            paymentRef: reference,
+          });
         }
       }
 
@@ -291,7 +339,7 @@ router.post(
         const { reference, failure_reason } = event.data;
         await Payment.findOneAndUpdate(
           { transferReference: reference },
-          { transferStatus: "failed" }
+          { transferStatus: "failed", transferFailureReason: failure_reason || "Transfer failed" }
         );
         console.error(`❌ Transfer failed: ${reference} — ${failure_reason}`);
         // TODO: send notification to admin and host

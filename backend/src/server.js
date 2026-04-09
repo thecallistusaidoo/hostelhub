@@ -29,10 +29,24 @@ dns.setServers(["1.1.1.1","8.8.8.8"])
 app.use(helmet());
 
 // ── CORS
+const allowedOrigins = (
+  process.env.FRONTEND_URLS ||
+  process.env.FRONTEND_URL ||
+  "http://localhost:3000"
+)
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:3000",
+  origin(origin, callback) {
+    // Allow server-to-server calls and non-browser tools (no Origin header)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
   credentials: true,
-  methods: ["GET","POST","PUT","DELETE","PATCH"],
+  methods: ["GET","POST","PUT","DELETE","PATCH","OPTIONS"],
 }));
 
 // ══════════════════════════════════════════════════════════════════

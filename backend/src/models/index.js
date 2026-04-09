@@ -111,6 +111,10 @@ const bookingSchema = new mongoose.Schema({
   hostelId:   { type: mongoose.Schema.Types.ObjectId, ref: "Hostel",  required: true },
   roomId:     { type: mongoose.Schema.Types.ObjectId, ref: "Room" },
   status:     { type: String, enum: ["pending","approved","rejected","paid"], default: "pending" },
+  amount:     { type: Number, default: 0 },
+  currency:   { type: String, default: "GHS" },
+  paymentStatus: { type: String, enum: ["pending","success","failed"], default: "pending" },
+  paymentFailureReason: { type: String, default: "" },
   message:    { type: String, default: "" },
   paymentRef: { type: String, default: "" },
 }, { timestamps: true });
@@ -145,11 +149,17 @@ const paymentSchema = new mongoose.Schema({
 
   // Paystack charge status (money hitting your account)
   paystackChargeStatus: { type: String, enum: ["pending","success","failed"], default: "pending" },
+  paystackGatewayResponse: { type: String, default: "" },
+  paystackChannel: { type: String, default: "" },
+  chargeFailureReason: { type: String, default: "" },
+  paidAt: { type: Date },
+  currency: { type: String, default: "GHS" },
 
   // Transfer to host status (money going from your account to host)
   transferReference:  { type: String, default: "" },      // Paystack transfer reference
   transferCode:       { type: String, default: "" },      // Paystack transfer_code
   transferStatus:     { type: String, enum: ["pending","initiated","success","failed","reversed",""], default: "" },
+  transferFailureReason: { type: String, default: "" },
 
   // Settled means host has been paid
   settled:           { type: Boolean, default: false },

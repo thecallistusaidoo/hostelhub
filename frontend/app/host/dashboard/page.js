@@ -3,6 +3,7 @@ import { Suspense, useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { host as hostAPI, getUser, clearAuth } from "../../lib/api";
+import HostPaymentsTab from "./PaymentsTab";
 
 const TABS = [
   { id:"overview",  label:"Overview",   icon:"🏠" },
@@ -696,7 +697,7 @@ function MessagesTab({ hostId, initialPartnerId, reload }) {
 }
 
 // ── PAYMENTS ──────────────────────────────────────────────────────────────────
-function PaymentsTab({ hostProfile, reload }) {
+function LegacyPaymentsTab({ hostProfile, reload }) {
   const [form, setForm] = useState({
     payoutMethod: hostProfile.payoutMethod || "",
     bankName: hostProfile.bankName || "",
@@ -986,7 +987,7 @@ function HostDashboardContent() {
         {activeTab === "hostels"   && <MyHostelsTab hostels={dashData.hostels} rooms={dashData.rooms} reload={loadData}/>}
         {activeTab === "bookings"  && <BookingsTab  bookings={dashData.bookings} reload={loadData}/>}
         {activeTab === "messages"  && <MessagesTab  hostId={hostProfile._id} initialPartnerId={initialPartnerId} reload={loadData}/>}
-        {activeTab === "payments"  && <PaymentsTab  hostProfile={hostProfile} reload={loadData}/>}
+        {activeTab === "payments"  && <HostPaymentsTab hostProfile={hostProfile} reload={loadData}/>}
         {activeTab === "settings"  && <SettingsTab  hostProfile={hostProfile} reload={loadData} onLogout={handleLogout}/>}
       </main>
     </div>

@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { Hostel, Student, Host, Booking, Payment, Room } = require("../models");
 const { protect, restrictTo } = require("../middleware");
+const paystack = require("../utils/paystack");
 
 router.use(protect, restrictTo("admin"));
 
@@ -14,11 +15,26 @@ router.get("/dashboard", async (req, res, next) => {
       Hostel.countDocuments({ status: "approved" }),
       Hostel.countDocuments({ status: "pending" }),
       Booking.countDocuments(),
-      Payment.find({ paystackStatus: "success" }),
+      Payment.find({}),
     ]);
-    const totalRevenue = payments.reduce((s, p) => s + p.platformFee, 0);
-    const totalPaidOut = payments.reduce((s, p) => s + p.hostPayout, 0);
-    res.json({ stats: { students, hosts, approvedHostels, pendingHostels, bookings, totalRevenue, totalPaidOut } });
+    const successfulCharges = payments.filter(p => p.paystackChargeStatus === "success");
+    const failedCharges = payments.filter(p => p.paystackChargeStatus === "failed");
+    const totalRevenue = successfulCharges.reduce((s, p) => s + p.platformFee, 0);
+    const totalPaidOut = payments.filter(p => p.transferStatus === "success").reduce((s, p) => s + p.hostPayout, 0);
+    res.json({
+      stats: {
+        students,
+        hosts,
+        approvedHostels,
+        pendingHostels,
+        bookings,
+        totalRevenue,
+        totalPaidOut,
+        totalTransactions: payments.length,
+        successfulTransactions: successfulCharges.length,
+        failedTransactions: failedCharges.length,
+      },
+    });
   } catch (err) { next(err); }
 });
 
@@ -172,11 +188,107 @@ router.delete("/hosts/:id", async (req, res, next) => {
 // GET /api/admin/payments
 router.get("/payments", async (req, res, next) => {
   try {
-    const payments = await Payment.find({ paystackStatus: "success" })
+    const { chargeStatus, transferStatus, includePaystack } = req.query;
+    const query = {};
+    if (chargeStatus) query.paystackChargeStatus = chargeStatus;
+    if (transferStatus) query.transferStatus = transferStatus;
+
+    const payments = await Payment.find(query)
       .populate("studentId", "firstName lastName email")
+      .populate("hostId", "fullName email phone")
       .populate("hostelId", "name")
+      .populate("bookingId", "status amount currency paymentStatus paymentRef")
       .sort({ createdAt: -1 });
-    res.json({ payments });
+
+    if (String(includePaystack) !== "true") {
+      return res.json({ payments });
+    }
+
+    const references = new Set(payments.map((p) => p.reference));
+    let external = [];
+    try {
+      const paystackTxs = await paystack.listTransactions({ page: 1, perPage: 100 });
+      external = paystackTxs
+        .filter((tx) => !references.has(tx.reference))
+        .map((tx) => ({
+          _id: `paystack-${tx.id}`,
+          source: "paystack",
+          reference: tx.reference,
+          amountPaid: Number(tx.amount || 0) / 100,
+          amountPaidPesewas: Number(tx.amount || 0),
+          platformFee: 0,
+          hostPayout: 0,
+          paystackChargeStatus: tx.status || "pending",
+          paystackGatewayResponse: tx.gateway_response || "",
+          paystackChannel: tx.channel || "",
+          transferStatus: "",
+          createdAt: tx.paid_at || tx.createdAt || new Date().toISOString(),
+          studentId: {
+            firstName: tx.customer?.first_name || "",
+            lastName: tx.customer?.last_name || "",
+            email: tx.customer?.email || "",
+          },
+          hostelId: { name: tx.metadata?.hostelName || "—" },
+        }));
+    } catch (err) {
+      // Keep DB results even when Paystack list fails
+      external = [];
+    }
+
+    res.json({ payments: [...payments, ...external] });
+  } catch (err) { next(err); }
+});
+
+// GET /api/admin/payments/:id
+router.get("/payments/:id", async (req, res, next) => {
+  try {
+    const payment = await Payment.findById(req.params.id)
+      .populate("studentId", "firstName lastName email phone umatId")
+      .populate("hostId", "fullName email phone payoutMethod bankName accountName momoNetwork momoNumber")
+      .populate("hostelId", "name location city address")
+      .populate("bookingId");
+    if (!payment) return res.status(404).json({ message: "Payment not found." });
+    res.json({ payment });
+  } catch (err) { next(err); }
+});
+
+// GET /api/admin/payments/reference/:reference
+router.get("/payments/reference/:reference", async (req, res, next) => {
+  try {
+    const ref = req.params.reference;
+    const payment = await Payment.findOne({ reference: ref })
+      .populate("studentId", "firstName lastName email phone umatId")
+      .populate("hostId", "fullName email phone payoutMethod bankName accountName momoNetwork momoNumber")
+      .populate("hostelId", "name location city address")
+      .populate("bookingId");
+
+    if (payment) return res.json({ payment });
+
+    const tx = await paystack.verifyTransaction(ref);
+    return res.json({
+      payment: {
+        _id: `paystack-${tx.id}`,
+        source: "paystack",
+        reference: tx.reference,
+        amountPaid: Number(tx.amount || 0) / 100,
+        amountPaidPesewas: Number(tx.amount || 0),
+        platformFee: 0,
+        hostPayout: 0,
+        paystackChargeStatus: tx.status || "pending",
+        paystackGatewayResponse: tx.gateway_response || "",
+        paystackChannel: tx.channel || "",
+        transferStatus: "",
+        createdAt: tx.paid_at || tx.createdAt || new Date().toISOString(),
+        studentId: {
+          firstName: tx.customer?.first_name || "",
+          lastName: tx.customer?.last_name || "",
+          email: tx.customer?.email || "",
+        },
+        hostId: null,
+        hostelId: { name: tx.metadata?.hostelName || "—" },
+        bookingId: null,
+      },
+    });
   } catch (err) { next(err); }
 });
 
