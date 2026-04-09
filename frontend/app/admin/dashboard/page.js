@@ -647,7 +647,9 @@ function PaymentsTab({ stats }) {
                     return (
                   <tr key={p._id} className="hover:bg-gray-50 transition cursor-pointer" onClick={() => openPayment(p.reference)}>
                     <td className="px-4 py-3 font-semibold text-gray-800">
-                      {(p.studentId?.firstName || p.studentId?.lastName) ? `${p.studentId?.firstName || ""} ${p.studentId?.lastName || ""}`.trim() : (p.studentId?.email || "—")}
+                      {(p.studentId?.firstName || p.studentId?.lastName)
+                        ? `${p.studentId?.firstName || ""} ${p.studentId?.lastName || ""}`.trim()
+                        : (p.studentId?.email || "Unknown Student")}
                     </td>
                     <td className="px-4 py-3 text-gray-500">{p.hostelId?.name || "—"}</td>
                     <td className="px-4 py-3 font-bold text-gray-800">GH₵{p.amountPaid?.toLocaleString()}</td>
@@ -690,7 +692,7 @@ function PaymentsTab({ stats }) {
                   <>
               <p><span className="text-gray-400">Reference:</span> <span className="font-mono">{selectedPayment.reference}</span></p>
               <p><span className="text-gray-400">Source:</span> {selectedPayment.source || "platform"}</p>
-              <p><span className="text-gray-400">Student:</span> {(selectedPayment.studentId?.firstName || selectedPayment.studentId?.lastName) ? `${selectedPayment.studentId?.firstName || ""} ${selectedPayment.studentId?.lastName || ""}`.trim() : "—"} ({selectedPayment.studentId?.email || "—"})</p>
+              <p><span className="text-gray-400">Student:</span> {(selectedPayment.studentId?.firstName || selectedPayment.studentId?.lastName) ? `${selectedPayment.studentId?.firstName || ""} ${selectedPayment.studentId?.lastName || ""}`.trim() : (selectedPayment.studentId?.email || "Unknown Student")}</p>
               <p><span className="text-gray-400">Host:</span> {selectedPayment.hostId?.fullName || "—"} ({selectedPayment.hostId?.email || "—"})</p>
               <p><span className="text-gray-400">Hostel:</span> {selectedPayment.hostelId?.name || "—"}</p>
               <p><span className="text-gray-400">Amount Paid:</span> GH₵{selectedPayment.amountPaid?.toLocaleString()}</p>

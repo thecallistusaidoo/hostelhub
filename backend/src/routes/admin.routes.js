@@ -210,6 +210,10 @@ router.get("/payments", async (req, res, next) => {
       const paystackTxs = await paystack.listTransactions({ page: 1, perPage: 100 });
       external = paystackTxs
         .filter((tx) => !references.has(tx.reference))
+        .filter((tx) => {
+          if (!chargeStatus) return true;
+          return (tx.status || "pending") === chargeStatus;
+        })
         .map((tx) => ({
           _id: `paystack-${tx.id}`,
           source: "paystack",
