@@ -145,11 +145,17 @@ export default function PaymentsTab({ hostProfile, reload }) {
   const totalEarned  = earnings?.totalEarned  || 0;
   const totalPending = earnings?.totalPending || 0;
   const payments     = earnings?.payments     || [];
-  const getGatewayFee = (payment) => {
+  const getFinancials = (payment) => {
     if (!payment) return 0;
-    if (payment.gatewayFee && payment.gatewayFee > 0) return payment.gatewayFee;
-    if (!payment.amountPaid || payment.amountPaid <= 0) return 0;
-    return Math.round(payment.amountPaid * 1.95) / 100;
+    const amountPaid = payment.amountPaid || 0;
+    if (amountPaid <= 0) return { gatewayFee: 0, platformFee: 0, hostPayout: 0 };
+    const gatewayPct = payment.gatewayFeePercent || 1.95;
+    const platformPct = payment.platformFeePercent || 5;
+    const gatewayFee = Math.round((amountPaid * gatewayPct / 100) * 100) / 100;
+    const netAfterGateway = Math.max(0, amountPaid - gatewayFee);
+    const platformFee = Math.round((netAfterGateway * platformPct / 100) * 100) / 100;
+    const hostPayout = Math.round((netAfterGateway - platformFee) * 100) / 100;
+    return { gatewayFee, platformFee, hostPayout };
   };
 
   return (
@@ -403,16 +409,18 @@ export default function PaymentsTab({ hostProfile, reload }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/10 dark:divide-white/05">
-                {payments.map(p => (
+                {payments.map(p => {
+                  const f = getFinancials(p);
+                  return (
                   <tr key={p._id} className="hover:bg-white/20 dark:hover:bg-white/05 transition">
                     <td className="px-4 py-3 font-semibold text-[--text-primary]">
                       {p.studentId?.firstName} {p.studentId?.lastName}
                     </td>
                     <td className="px-4 py-3 text-[--text-secondary]">{p.roomName || p.hostelId?.name}</td>
                     <td className="px-4 py-3 font-bold text-[--text-primary]">GH₵{p.amountPaid?.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-amber-600 font-semibold">GH₵{getGatewayFee(p).toLocaleString()}</td>
-                    <td className="px-4 py-3 text-[--text-muted]">GH₵{p.platformFee?.toLocaleString()}</td>
-                    <td className="px-4 py-3 font-bold text-emerald-600">GH₵{p.hostPayout?.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-amber-600 font-semibold">GH₵{f.gatewayFee.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-[--text-muted]">GH₵{f.platformFee.toLocaleString()}</td>
+                    <td className="px-4 py-3 font-bold text-emerald-600">GH₵{f.hostPayout.toLocaleString()}</td>
                     <td className="px-4 py-3 text-[--text-muted]">{new Date(p.createdAt).toLocaleDateString()}</td>
                     <td className="px-4 py-3">
                       {p.settled ? (
@@ -424,7 +432,8 @@ export default function PaymentsTab({ hostProfile, reload }) {
                       )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

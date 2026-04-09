@@ -570,14 +570,18 @@ function PaymentsTab({ stats }) {
     if (!payment) return 0;
     if (payment.gatewayFee && payment.gatewayFee > 0) return payment.gatewayFee;
     if (!payment.amountPaid || payment.amountPaid <= 0) return 0;
-    return Math.round(payment.amountPaid * 1.95) / 100;
+    const pct = payment.gatewayFeePercent || 1.95;
+    return Math.round((payment.amountPaid * pct / 100) * 100) / 100;
   };
 
-  const getNetAfterGateway = (payment) => {
+  const getFinancials = (payment) => {
     if (!payment) return 0;
-    if (payment.netAfterGateway && payment.netAfterGateway > 0) return payment.netAfterGateway;
     const fee = getGatewayFee(payment);
-    return Math.max(0, (payment.amountPaid || 0) - fee);
+    const netAfterGateway = Math.max(0, (payment.amountPaid || 0) - fee);
+    const platformPct = payment.platformFeePercent || 5;
+    const platformFee = Math.round((netAfterGateway * platformPct / 100) * 100) / 100;
+    const hostPayout = Math.round((netAfterGateway - platformFee) * 100) / 100;
+    return { gatewayFee: fee, netAfterGateway, platformFee, hostPayout };
   };
 
   if (payments === null) return <div className="flex justify-center py-20"><Spinner/></div>;
@@ -638,15 +642,18 @@ function PaymentsTab({ stats }) {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {payments.map(p => (
+                  (() => {
+                    const f = getFinancials(p);
+                    return (
                   <tr key={p._id} className="hover:bg-gray-50 transition cursor-pointer" onClick={() => openPayment(p.reference)}>
                     <td className="px-4 py-3 font-semibold text-gray-800">
                       {(p.studentId?.firstName || p.studentId?.lastName) ? `${p.studentId?.firstName || ""} ${p.studentId?.lastName || ""}`.trim() : (p.studentId?.email || "—")}
                     </td>
                     <td className="px-4 py-3 text-gray-500">{p.hostelId?.name || "—"}</td>
                     <td className="px-4 py-3 font-bold text-gray-800">GH₵{p.amountPaid?.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-amber-600 font-semibold">GH₵{getGatewayFee(p).toLocaleString()}</td>
-                    <td className="px-4 py-3 text-emerald-600 font-semibold">GH₵{p.platformFee?.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-[#1E40AF] font-semibold">GH₵{p.hostPayout?.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-amber-600 font-semibold">GH₵{f.gatewayFee.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-emerald-600 font-semibold">GH₵{f.platformFee.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-[#1E40AF] font-semibold">GH₵{f.hostPayout.toLocaleString()}</td>
                     <td className="px-4 py-3 text-gray-400">{new Date(p.createdAt).toLocaleDateString()}</td>
                     <td className="px-4 py-3">
                       <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
@@ -658,6 +665,8 @@ function PaymentsTab({ stats }) {
                       </span>
                     </td>
                   </tr>
+                    );
+                  })()
                 ))}
               </tbody>
             </table>
@@ -675,16 +684,21 @@ function PaymentsTab({ stats }) {
               <button onClick={() => setSelectedPayment(null)} className="text-gray-400 hover:text-gray-600">✕</button>
             </div>
             <div className="space-y-2 text-sm">
+              {(() => {
+                const f = getFinancials(selectedPayment);
+                return (
+                  <>
               <p><span className="text-gray-400">Reference:</span> <span className="font-mono">{selectedPayment.reference}</span></p>
               <p><span className="text-gray-400">Source:</span> {selectedPayment.source || "platform"}</p>
               <p><span className="text-gray-400">Student:</span> {(selectedPayment.studentId?.firstName || selectedPayment.studentId?.lastName) ? `${selectedPayment.studentId?.firstName || ""} ${selectedPayment.studentId?.lastName || ""}`.trim() : "—"} ({selectedPayment.studentId?.email || "—"})</p>
               <p><span className="text-gray-400">Host:</span> {selectedPayment.hostId?.fullName || "—"} ({selectedPayment.hostId?.email || "—"})</p>
               <p><span className="text-gray-400">Hostel:</span> {selectedPayment.hostelId?.name || "—"}</p>
               <p><span className="text-gray-400">Amount Paid:</span> GH₵{selectedPayment.amountPaid?.toLocaleString()}</p>
-              <p><span className="text-gray-400">Paystack Fee (1.95%):</span> GH₵{getGatewayFee(selectedPayment).toLocaleString()}</p>
-              <p><span className="text-gray-400">Net After Paystack:</span> GH₵{getNetAfterGateway(selectedPayment).toLocaleString()}</p>
-              <p><span className="text-gray-400">Platform Fee:</span> GH₵{selectedPayment.platformFee?.toLocaleString()}</p>
-              <p><span className="text-gray-400">Host Payout:</span> GH₵{selectedPayment.hostPayout?.toLocaleString()}</p>
+              <p><span className="text-gray-400">Paystack Fee ({selectedPayment.gatewayFeePercent || 1.95}%):</span> GH₵{f.gatewayFee.toLocaleString()}</p>
+              <p><span className="text-gray-400">Net After Paystack:</span> GH₵{f.netAfterGateway.toLocaleString()}</p>
+              <p><span className="text-gray-400">Platform Fee ({selectedPayment.platformFeePercent || 5}% of net):</span> GH₵{f.platformFee.toLocaleString()}</p>
+              <p><span className="text-gray-400">Host Payout:</span> GH₵{f.hostPayout.toLocaleString()}</p>
+              <p><span className="text-gray-400">Balance Check:</span> GH₵{((selectedPayment.amountPaid || 0) - f.gatewayFee - f.platformFee - f.hostPayout).toFixed(2)}</p>
               <p><span className="text-gray-400">Charge Status:</span> {selectedPayment.paystackChargeStatus}</p>
               <p><span className="text-gray-400">Charge Failure Reason:</span> {selectedPayment.chargeFailureReason || "—"}</p>
               <p><span className="text-gray-400">Gateway Response:</span> {selectedPayment.paystackGatewayResponse || "—"}</p>
@@ -694,6 +708,9 @@ function PaymentsTab({ stats }) {
               <p><span className="text-gray-400">Booking ID:</span> {selectedPayment.bookingId?._id || "—"}</p>
               <p><span className="text-gray-400">Booking Payment Status:</span> {selectedPayment.bookingId?.paymentStatus || "—"}</p>
               <p><span className="text-gray-400">Created:</span> {new Date(selectedPayment.createdAt).toLocaleString()}</p>
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>
