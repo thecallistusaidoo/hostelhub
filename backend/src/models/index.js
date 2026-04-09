@@ -143,9 +143,12 @@ const paymentSchema = new mongoose.Schema({
   amountPaidPesewas: { type: Number, required: true },    // Full amount in pesewas (amountPaid * 100)
 
   // Fee split
+  gatewayFeePercent: { type: Number, default: 1.95 },
+  gatewayFee:        { type: Number, default: 0 },           // Paystack charge deducted first
+  netAfterGateway:   { type: Number, default: 0 },           // amountPaid - gatewayFee
   platformFeePercent:{ type: Number, default: 5 },
-  platformFee:       { type: Number, required: true },    // 5% in GH₵ — stays in your Paystack balance
-  hostPayout:        { type: Number, required: true },    // 95% in GH₵ — transferred to host
+  platformFee:       { type: Number, required: true },       // Platform fee taken from netAfterGateway
+  hostPayout:        { type: Number, required: true },       // Host payout from netAfterGateway
 
   // Paystack charge status (money hitting your account)
   paystackChargeStatus: { type: String, enum: ["pending","success","failed"], default: "pending" },

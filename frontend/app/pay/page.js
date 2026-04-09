@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 const PLATFORM_FEE_PERCENT = 5;
+const PAYSTACK_GATEWAY_FEE_PERCENT = 1.95;
 
 export default function PaymentPage() {
   const router = useRouter();
@@ -26,6 +27,10 @@ export default function PaymentPage() {
   const amount     = Number(queryParams?.get("amount") || 0);
   const billing    = queryParams?.get("billing") || "Yearly";
   const hostelName = queryParams?.get("hostelName") || "Hostel";
+  const gatewayFee = Math.round(amount * PAYSTACK_GATEWAY_FEE_PERCENT) / 100;
+  const netAfterGateway = Math.round((amount - gatewayFee) * 100) / 100;
+  const platformFee = Math.round((netAfterGateway * PLATFORM_FEE_PERCENT / 100) * 100) / 100;
+  const hostPayout = Math.round((netAfterGateway - platformFee) * 100) / 100;
 
   const [user, setUser] = useState(null);
   const [step, setStep] = useState("review"); // "review" | "paying"
@@ -142,8 +147,16 @@ export default function PaymentPage() {
                   <span className="font-semibold text-gray-800">GH₵{amount.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Platform fee ({PLATFORM_FEE_PERCENT}%)</span>
-                  <span className="text-gray-500">Included</span>
+                  <span className="text-gray-500">Paystack fee ({PAYSTACK_GATEWAY_FEE_PERCENT}%)</span>
+                  <span className="text-amber-600 font-semibold">GH₵{gatewayFee.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Platform fee ({PLATFORM_FEE_PERCENT}% of net)</span>
+                  <span className="text-emerald-600 font-semibold">GH₵{platformFee.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Host payout (after fees)</span>
+                  <span className="text-[#1E40AF] font-semibold">GH₵{hostPayout.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between text-base font-extrabold border-t border-gray-100 pt-2 mt-2">
                   <span className="text-gray-800">Total to pay</span>

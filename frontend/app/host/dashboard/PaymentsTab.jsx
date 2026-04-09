@@ -32,6 +32,8 @@ const MOMO_NETWORKS = [
   { value: "vodafone",    label: "Vodafone Cash",      color: "#E60000" },
   { value: "airteltigo", label: "AirtelTigo Money",   color: "#0072BC" },
 ];
+const PAYSTACK_GATEWAY_FEE_PERCENT = 1.95;
+const PLATFORM_FEE_PERCENT = 5;
 
 export default function PaymentsTab({ hostProfile, reload }) {
   const [payoutStatus, setPayoutStatus] = useState(null);
@@ -156,7 +158,7 @@ export default function PaymentsTab({ hostProfile, reload }) {
       {/* Earnings summary */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { l:"Total Earned (95%)", v:`GH₵${totalEarned.toLocaleString()}`,  icon:"💰", c:"text-emerald-600" },
+          { l:"Total Earned (After fees)", v:`GH₵${totalEarned.toLocaleString()}`,  icon:"💰", c:"text-emerald-600" },
           { l:"Pending Payout",     v:`GH₵${totalPending.toLocaleString()}`, icon:"⏳", c:"text-amber-600" },
           { l:"Total Transactions", v:payments.length,                        icon:"📊", c:"text-gray-800" },
         ].map(s => (
@@ -178,14 +180,16 @@ export default function PaymentsTab({ hostProfile, reload }) {
           <p className="font-bold text-[--text-primary] text-sm">How Payments Work</p>
           <p className="text-xs text-[--text-muted] mt-1 leading-relaxed">
             Students pay the full amount through Paystack. The money arrives in the HostelHub Paystack account.
-            <strong className="text-[--text-primary]"> 5%</strong> is kept as a platform fee, and
-            <strong className="text-[--text-primary]"> 95%</strong> is automatically transferred to your bank or MoMo account after each verified payment.
+            Paystack first deducts <strong className="text-[--text-primary]">{PAYSTACK_GATEWAY_FEE_PERCENT}%</strong>.
+            Then HostelHub takes <strong className="text-[--text-primary]">{PLATFORM_FEE_PERCENT}%</strong> from the remaining amount,
+            and the rest is automatically transferred to your bank or MoMo account after each verified payment.
             No action needed from you — set up your account once and get paid automatically.
           </p>
           <p className="text-xs text-[--text-muted] mt-2">
             Example: Student pays <strong className="text-[--text-primary]">GH₵3,000</strong> →
-            HostelHub keeps <strong className="text-emerald-600">GH₵150</strong> →
-            You receive <strong className="text-[#1E40AF]">GH₵2,850</strong>
+            Paystack fee <strong className="text-amber-600">GH₵58.50</strong> →
+            platform fee <strong className="text-emerald-600">GH₵147.08</strong> →
+            host payout <strong className="text-[#1E40AF]">GH₵2,794.42</strong>
           </p>
         </div>
       </div>
@@ -195,7 +199,7 @@ export default function PaymentsTab({ hostProfile, reload }) {
         <div className="p-5 border-b border-white/20 dark:border-white/08 flex items-center justify-between">
           <div>
             <h2 className="font-bold text-[--text-primary]">💳 Payout Account</h2>
-            <p className="text-xs text-[--text-muted] mt-0.5">Where should we send your 95%?</p>
+            <p className="text-xs text-[--text-muted] mt-0.5">Where should we send your payout after Paystack and platform fees?</p>
           </div>
           {payoutStatus?.payoutSetupComplete && !editing && (
             <div className="flex items-center gap-2">
@@ -387,7 +391,7 @@ export default function PaymentsTab({ hostProfile, reload }) {
             <table className="w-full text-sm">
               <thead className="bg-white/30 dark:bg-black/20 border-b border-white/20">
                 <tr>
-                  {["Student","Room","Amount","Your Cut (95%)","Platform Fee","Date","Status"].map(h => (
+                  {["Student","Room","Amount Paid","Paystack Fee","Platform Fee","Your Payout","Date","Status"].map(h => (
                     <th key={h} className="text-left text-xs font-semibold text-[--text-muted] px-4 py-3">{h}</th>
                   ))}
                 </tr>
@@ -400,8 +404,9 @@ export default function PaymentsTab({ hostProfile, reload }) {
                     </td>
                     <td className="px-4 py-3 text-[--text-secondary]">{p.roomName || p.hostelId?.name}</td>
                     <td className="px-4 py-3 font-bold text-[--text-primary]">GH₵{p.amountPaid?.toLocaleString()}</td>
-                    <td className="px-4 py-3 font-bold text-emerald-600">GH₵{p.hostPayout?.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-amber-600 font-semibold">GH₵{(p.gatewayFee || 0).toLocaleString()}</td>
                     <td className="px-4 py-3 text-[--text-muted]">GH₵{p.platformFee?.toLocaleString()}</td>
+                    <td className="px-4 py-3 font-bold text-emerald-600">GH₵{p.hostPayout?.toLocaleString()}</td>
                     <td className="px-4 py-3 text-[--text-muted]">{new Date(p.createdAt).toLocaleDateString()}</td>
                     <td className="px-4 py-3">
                       {p.settled ? (

@@ -12,6 +12,7 @@ const { Host, Hostel, Booking, Payment } = require("../models");
 const paystack = require("../utils/paystack");
 
 const PLATFORM_FEE_PERCENT = 5;
+const PAYSTACK_GATEWAY_FEE_PERCENT = 1.95;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/payments/initialize
@@ -35,9 +36,11 @@ router.post("/initialize", protect, restrictTo("student"), async (req, res, next
     // Warn if host hasn't set up payout — payment still works but transfer will be queued
     const payoutReady = host?.payoutSetupComplete && host?.paystackRecipientCode;
 
-    // Calculate the split
-    const platformFee = parseFloat((amountGHS * PLATFORM_FEE_PERCENT / 100).toFixed(2));
-    const hostPayout  = parseFloat((amountGHS - platformFee).toFixed(2));
+    // Calculate split: Paystack fee first, then platform/host split
+    const gatewayFee = parseFloat((amountGHS * PAYSTACK_GATEWAY_FEE_PERCENT / 100).toFixed(2));
+    const netAfterGateway = parseFloat((amountGHS - gatewayFee).toFixed(2));
+    const platformFee = parseFloat((netAfterGateway * PLATFORM_FEE_PERCENT / 100).toFixed(2));
+    const hostPayout = parseFloat((netAfterGateway - platformFee).toFixed(2));
 
     // Generate a unique reference
     const reference = `HH-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
@@ -56,6 +59,8 @@ router.post("/initialize", protect, restrictTo("student"), async (req, res, next
         roomName:         roomName || "",
         studentId:        req.user.id,
         bookingId:        bookingId?.toString() || "",
+        gatewayFee:       gatewayFee.toString(),
+        netAfterGateway:  netAfterGateway.toString(),
         platformFee:      platformFee.toString(),
         hostPayout:       hostPayout.toString(),
         paystackRecipientCode: host?.paystackRecipientCode || "",
@@ -77,6 +82,9 @@ router.post("/initialize", protect, restrictTo("student"), async (req, res, next
       roomName:          roomName || "",
       amountPaid:        amountGHS,
       amountPaidPesewas: Math.round(amountGHS * 100),
+      gatewayFeePercent: PAYSTACK_GATEWAY_FEE_PERCENT,
+      gatewayFee,
+      netAfterGateway,
       platformFeePercent:PLATFORM_FEE_PERCENT,
       platformFee,
       hostPayout,
@@ -90,9 +98,11 @@ router.post("/initialize", protect, restrictTo("student"), async (req, res, next
       reference,
       payoutReady,  // frontend can warn if host hasn't set up payout
       breakdown: {
-        totalPaid:   amountGHS,
+        totalPaid: amountGHS,
+        gatewayFee: { percent: PAYSTACK_GATEWAY_FEE_PERCENT, amount: gatewayFee },
+        netAfterGateway,
         platformFee: { percent: PLATFORM_FEE_PERCENT, amount: platformFee },
-        hostPayout:  { percent: 100 - PLATFORM_FEE_PERCENT, amount: hostPayout },
+        hostPayout: { amount: hostPayout },
       },
     });
 
@@ -208,9 +218,11 @@ router.post("/verify", protect, async (req, res, next) => {
       message: "Payment verified and host payout initiated.",
       settled:   transferData.status === "success",
       breakdown: {
-        totalPaid:   payment.amountPaid,
+        totalPaid: payment.amountPaid,
+        gatewayFee: { percent: payment.gatewayFeePercent || PAYSTACK_GATEWAY_FEE_PERCENT, amount: payment.gatewayFee || 0 },
+        netAfterGateway: payment.netAfterGateway || payment.amountPaid,
         platformFee: { percent: PLATFORM_FEE_PERCENT, amount: payment.platformFee },
-        hostPayout:  { percent: 100 - PLATFORM_FEE_PERCENT, amount: payment.hostPayout, transferCode: transferData.transfer_code },
+        hostPayout: { amount: payment.hostPayout, transferCode: transferData.transfer_code },
       },
       payment,
     });

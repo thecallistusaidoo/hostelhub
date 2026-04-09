@@ -572,8 +572,8 @@ function PaymentsTab({ stats }) {
     <div className="space-y-5">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {[
-          { l:"Platform Revenue (5%)", v:`GH₵${stats?.totalRevenue?.toLocaleString()||0}`, icon:"💰", color:"text-emerald-600" },
-          { l:"Paid Out to Hosts (95%)", v:`GH₵${stats?.totalPaidOut?.toLocaleString()||0}`, icon:"🏦", color:"text-[#1E40AF]" },
+          { l:"Platform Revenue (after Paystack 1.95%)", v:`GH₵${stats?.totalRevenue?.toLocaleString()||0}`, icon:"💰", color:"text-emerald-600" },
+          { l:"Paid Out to Hosts (after all fees)", v:`GH₵${stats?.totalPaidOut?.toLocaleString()||0}`, icon:"🏦", color:"text-[#1E40AF]" },
         ].map(s => (
           <div key={s.l} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <span style={{fontSize:"22px"}}>{s.icon}</span>
@@ -617,7 +617,7 @@ function PaymentsTab({ stats }) {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  {["Student","Hostel","Amount","Platform Fee","Host Payout","Date","Status"].map(h => (
+                  {["Student","Hostel","Amount Paid","Paystack Fee","Platform Fee","Host Payout","Date","Status"].map(h => (
                     <th key={h} className="text-left text-xs font-semibold text-gray-400 px-4 py-3">{h}</th>
                   ))}
                 </tr>
@@ -630,6 +630,7 @@ function PaymentsTab({ stats }) {
                     </td>
                     <td className="px-4 py-3 text-gray-500">{p.hostelId?.name || "—"}</td>
                     <td className="px-4 py-3 font-bold text-gray-800">GH₵{p.amountPaid?.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-amber-600 font-semibold">GH₵{(p.gatewayFee || 0).toLocaleString()}</td>
                     <td className="px-4 py-3 text-emerald-600 font-semibold">GH₵{p.platformFee?.toLocaleString()}</td>
                     <td className="px-4 py-3 text-[#1E40AF] font-semibold">GH₵{p.hostPayout?.toLocaleString()}</td>
                     <td className="px-4 py-3 text-gray-400">{new Date(p.createdAt).toLocaleDateString()}</td>
@@ -666,6 +667,8 @@ function PaymentsTab({ stats }) {
               <p><span className="text-gray-400">Host:</span> {selectedPayment.hostId?.fullName || "—"} ({selectedPayment.hostId?.email || "—"})</p>
               <p><span className="text-gray-400">Hostel:</span> {selectedPayment.hostelId?.name || "—"}</p>
               <p><span className="text-gray-400">Amount Paid:</span> GH₵{selectedPayment.amountPaid?.toLocaleString()}</p>
+              <p><span className="text-gray-400">Paystack Fee (1.95%):</span> GH₵{(selectedPayment.gatewayFee || 0).toLocaleString()}</p>
+              <p><span className="text-gray-400">Net After Paystack:</span> GH₵{(selectedPayment.netAfterGateway || selectedPayment.amountPaid || 0).toLocaleString()}</p>
               <p><span className="text-gray-400">Platform Fee:</span> GH₵{selectedPayment.platformFee?.toLocaleString()}</p>
               <p><span className="text-gray-400">Host Payout:</span> GH₵{selectedPayment.hostPayout?.toLocaleString()}</p>
               <p><span className="text-gray-400">Charge Status:</span> {selectedPayment.paystackChargeStatus}</p>
