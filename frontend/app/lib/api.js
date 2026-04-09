@@ -133,6 +133,7 @@ export const admin = {
   approve:       (id)      => apiFetch(`/api/admin/hostels/${id}/approve`, { method: "PUT" }),
   reject:        (id, reason) => apiFetch(`/api/admin/hostels/${id}/reject`, { method: "PUT", body: JSON.stringify({ reason }) }),
   feature:       (id)      => apiFetch(`/api/admin/hostels/${id}/feature`, { method: "PUT" }),
+  rating:        (id, rating) => apiFetch(`/api/admin/hostels/${id}/rating`, { method: "PUT", body: JSON.stringify({ rating }) }),
   removeHostel:  (id)      => apiFetch(`/api/admin/hostels/${id}`,         { method: "DELETE" }),
   students:      (search)  => apiFetch(`/api/admin/students${search ? `?search=${search}` : ""}`),
   removeStudent: (id)      => apiFetch(`/api/admin/students/${id}`,        { method: "DELETE" }),

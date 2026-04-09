@@ -39,7 +39,7 @@ const addHostelSchema = z.object({
 
 const bookingSchema = z.object({
   hostelId: z.string(),
-  roomId:   z.string().optional(),
+  roomId:   z.string(),
   message:  z.string().optional(),
 });
 

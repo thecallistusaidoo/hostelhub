@@ -341,6 +341,14 @@ function AllHostelsTab() {
     } catch (e) { showToast(e.message, "error"); }
   };
 
+  const updateRating = async (h, newRating) => {
+    try {
+      await adminAPI.rating(h._id, newRating);
+      setHostels(prev => prev.map(x => x._id === h._id ? { ...x, hostRating: newRating } : x));
+      showToast(`"${h.name}" rating set to ${newRating}.`);
+    } catch (e) { showToast(e.message, "error"); }
+  };
+
   if (hostels === null) return <div className="flex justify-center py-20"><Spinner/></div>;
 
   return (
@@ -367,7 +375,7 @@ function AllHostelsTab() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  {["Hostel","Host","Location","Status","Views","Featured","Actions"].map(h => (
+                  {["Hostel","Host","Location","Status","Views","Rating","Featured","Actions"].map(h => (
                     <th key={h} className="text-left text-xs font-semibold text-gray-500 px-4 py-3">{h}</th>
                   ))}
                 </tr>
@@ -388,6 +396,20 @@ function AllHostelsTab() {
                       }`}>{h.status}</span>
                     </td>
                     <td className="px-4 py-3 font-semibold text-[#1E40AF]">{h.viewsCount||0}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
+                        {[1, 2, 3, 4, 5].map(star => (
+                          <button
+                            key={star}
+                            onClick={() => updateRating(h, star)}
+                            className={`text-lg transition-all ${star <= (h.hostRating || 0) ? "text-[#F59E0B]" : "text-gray-300 hover:text-[#F59E0B]"}`}
+                            title={`Rate ${star}`}
+                          >
+                            ★
+                          </button>
+                        ))}
+                      </div>
+                    </td>
                     <td className="px-4 py-3">
                       {h.status === "approved" && (
                         <button onClick={() => toggleFeatured(h)}

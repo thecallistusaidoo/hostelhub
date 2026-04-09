@@ -3,9 +3,10 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { host as hostAPI, getUser } from "../../lib/api";
+import LocationMap from "../../components/LocationMap";
 
 const AMENITIES_LIST = ["WiFi","Water","Electricity","Generator","Kitchen","Security","AC","Laundry","Parking","Wardrobe"];
-const LOCATIONS = ["Umat (Near Campus)","Tarkwa Town","Nyankomasi","Bogoso","Other"];
+const LOCATIONS = ["Essikado","Ketan","BU","Mempeasem","Kojokrom"];
 
 export default function AddHostelPage() {
   const [step, setStep] = useState(1);
@@ -17,11 +18,17 @@ export default function AddHostelPage() {
   const [form, setForm] = useState({
     name:"", location:"", address:"", ghanaPost:"", landmark:"", campusDistance:"",
     description:"", gender:"Mixed", amenities:[], priceFrom:"", priceTo:"",
+    latitude: null, longitude: null,
     ownershipDoc:null, additionalImages:[],
   });
 
   const set = (k,v) => setForm(f => ({...f, [k]:v}));
   const toggleAmenity = (a) => set("amenities", form.amenities.includes(a) ? form.amenities.filter(x=>x!==a) : [...form.amenities,a]);
+
+  const handleLocationSelect = (coords) => {
+    set("latitude", coords.lat);
+    set("longitude", coords.lng);
+  };
 
   const handleSubmit = async () => {
     setError(null);
@@ -29,8 +36,8 @@ export default function AddHostelPage() {
       router.push("/login");
       return;
     }
-    if (!form.name || !form.location || !form.description) {
-      setError("Please fill hostel name, location, and description.");
+    if (!form.name || !form.location || !form.description || !form.latitude || !form.longitude) {
+      setError("Please fill hostel name, location, description, and select location on map.");
       return;
     }
 
@@ -46,6 +53,10 @@ export default function AddHostelPage() {
     fd.append("amenities", JSON.stringify(form.amenities || []));
     fd.append("priceFrom", form.priceFrom || "");
     fd.append("priceTo", form.priceTo || "");
+    if (form.latitude && form.longitude) {
+      fd.append("latitude", form.latitude.toString());
+      fd.append("longitude", form.longitude.toString());
+    }
 
     // Backend expects: images + documents
     if (form.additionalImages?.length) {
@@ -162,6 +173,24 @@ export default function AddHostelPage() {
                   </select>
                 </div>
               </div>
+
+              {/* Map Location Selection */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-2">📍 Pin Location on Map *</label>
+                <p className="text-xs text-gray-500 mb-3">Click on the map to select your hostel's exact location</p>
+                <LocationMap
+                  onLocationSelect={handleLocationSelect}
+                  selectedLocation={form.latitude && form.longitude ? { lat: form.latitude, lng: form.longitude } : null}
+                />
+                {form.latitude && form.longitude && (
+                  <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-xs text-green-700 font-medium">
+                      ✓ Location selected: {form.latitude.toFixed(6)}, {form.longitude.toFixed(6)}
+                    </p>
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">Street Address *</label>
                 <input className="input-field" placeholder="e.g. Odobikese St." value={form.address} onChange={e => set("address", e.target.value)}/>

@@ -8,7 +8,10 @@
     "start": "next start"
   },
   "dependencies": {
+    "@googlemaps/js-api-loader": "^2.0.2",
+    "@googlemaps/react-wrapper": "^1.2.0",
     "axios": "^1.14.0",
+    "jspdf": "^4.2.1",
     "next": "14.2.5",
     "react": "18.2.0",
     "react-dom": "18.2.0",

@@ -1,4 +1,5 @@
 "use client";
+export const dynamic = "force-dynamic";
 // app/pay/page.js
 // Student payment page powered by Paystack
 // Install: npm install @paystack/inline-js (or use their CDN script)
@@ -6,20 +7,25 @@
 // URL params: /pay?hostelId=1&roomName=2+in+a+Room&amount=3000&billing=Yearly
 
 import { useState, useEffect } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 const PLATFORM_FEE_PERCENT = 5;
 
 export default function PaymentPage() {
-  const params = useSearchParams();
   const router = useRouter();
+  const [queryParams, setQueryParams] = useState(null);
 
-  const hostelId   = params.get("hostelId") || "1";
-  const roomName   = params.get("roomName") || "Room";
-  const amount     = Number(params.get("amount") || 0);
-  const billing    = params.get("billing") || "Yearly";
-  const hostelName = params.get("hostelName") || "Hostel";
+  useEffect(() => {
+    setQueryParams(new URLSearchParams(window.location.search));
+  }, []);
+
+  const hostelId   = queryParams?.get("hostelId") || "1";
+  const roomId     = queryParams?.get("roomId") || "";
+  const roomName   = queryParams?.get("roomName") || "Room";
+  const amount     = Number(queryParams?.get("amount") || 0);
+  const billing    = queryParams?.get("billing") || "Yearly";
+  const hostelName = queryParams?.get("hostelName") || "Hostel";
 
   const platformFee = Math.round(amount * (PLATFORM_FEE_PERCENT / 100) * 100) / 100;
   const hostPayout  = amount - platformFee;
@@ -35,8 +41,32 @@ export default function PaymentPage() {
     setReference(`HH-${Date.now()}-${Math.random().toString(36).slice(2,8).toUpperCase()}`);
   }, []);
 
-  const initializePaystack = () => {
+  const initializePaystack = async () => {
+    if (!hostelId || !roomId || amount <= 0) {
+      alert("Please select a valid room and amount before proceeding to payment.");
+      return;
+    }
+
     setStep("paying");
+
+    // First, create a booking if not exists
+    try {
+      const bookRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/bookings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
+        body: JSON.stringify({ hostelId, roomId, message: `Booking for ${roomName}` }),
+      });
+      if (!bookRes.ok) {
+        const err = await bookRes.json();
+        alert("Failed to create booking: " + err.message);
+        setStep("review");
+        return;
+      }
+    } catch {
+      alert("Failed to create booking. Please try again.");
+      setStep("review");
+      return;
+    }
 
     // Load Paystack inline script dynamically
     const script = document.createElement("script");
@@ -51,6 +81,7 @@ export default function PaymentPage() {
         ref: reference,
         metadata: {
           hostelId,
+          roomId,
           hostelName,
           roomName,
           studentId: user?.id,
@@ -72,17 +103,19 @@ export default function PaymentPage() {
 
   const verifyPayment = async (ref) => {
     try {
-      // In production: POST to your backend to verify with Paystack API
-      // and trigger the host payout (95%) after verification
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/payments/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
-        body: JSON.stringify({ reference: ref, hostelId, roomName, amount }),
+        body: JSON.stringify({ reference: ref, hostelId, roomId, roomName, amount }),
       });
-      // For demo purposes without backend:
-      setStep("success");
+      const data = await res.json();
+      if (res.ok) {
+        setStep("success");
+      } else {
+        setStep("failed");
+      }
     } catch {
-      setStep("success"); // still show success in demo mode
+      setStep("failed");
     }
   };
 
@@ -157,6 +190,28 @@ export default function PaymentPage() {
           </div>
         )}
 
+        {/* FAILED STATE */}
+        {step === "failed" && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center">
+            <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-5">
+              <svg className="w-10 h-10 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </div>
+            <h1 className="text-2xl font-extrabold text-gray-900 mb-2" style={{fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Payment Failed</h1>
+            <p className="text-gray-500 text-sm leading-relaxed mb-6">We couldn't process your payment. Please try again or contact support.</p>
+
+            <div className="flex gap-3">
+              <button onClick={() => setStep("review")} className="flex-1 text-center bg-[#1E40AF] hover:bg-[#1e3a8a] text-white font-bold rounded-xl py-3 transition">
+                Try Again
+              </button>
+              <Link href="/student/dashboard" className="flex-1 text-center border border-gray-200 text-gray-600 font-semibold rounded-xl py-3 hover:border-gray-300 transition">
+                Go to Dashboard
+              </Link>
+            </div>
+          </div>
+        )}
+
         {/* REVIEW + PAY STATE */}
         {(step === "review" || step === "paying") && (
           <div className="space-y-5">
@@ -191,13 +246,6 @@ export default function PaymentPage() {
                   <span className="text-gray-800">Total to pay</span>
                   <span className="text-[#1E40AF]">GH₵{amount.toLocaleString()}</span>
                 </div>
-              </div>
-
-              {/* Fee breakdown notice */}
-              <div className="bg-gray-50 rounded-xl p-3 text-xs text-gray-500 space-y-1">
-                <p className="font-semibold text-gray-600">How your payment is split:</p>
-                <p>→ {100 - PLATFORM_FEE_PERCENT}% (GH₵{hostPayout.toLocaleString()}) goes directly to your host</p>
-                <p>→ {PLATFORM_FEE_PERCENT}% (GH₵{platformFee.toLocaleString()}) goes to HostelHub for platform services</p>
               </div>
             </div>
 

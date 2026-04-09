@@ -3,6 +3,9 @@ import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import Navbar from "../../components/Navbar";
+import Footer from "../../components/Footer";
+import LocationMap from "../../components/LocationMap";
 import { admin as adminAPI, hostels as hostelsAPI, student as studentAPI, getUser } from "../../lib/api";
 
 const AMENITY_ICONS = {
@@ -69,10 +72,18 @@ export default function HostelDetail() {
     return () => { alive = false; };
   }, [id, user?.role]);
 
+  useEffect(() => {
+    if (selectedRoom !== null) return;
+    if (!rooms.length) return;
+    const firstAvailable = rooms.findIndex(r => (r.status || "available") === "available");
+    setSelectedRoom(firstAvailable !== -1 ? firstAvailable : 0);
+  }, [rooms, selectedRoom]);
+
   const mapped = useMemo(() => {
     if (!hostel) return null;
 
     const roomTypes = rooms.map(r => ({
+      id: r._id,
       name: r.name,
       price: Number(r.price || 0),
       billing: r.billing || "Yearly",
@@ -96,6 +107,8 @@ export default function HostelDetail() {
       hostPhone: hostel.ownerId?.phone || "",
       hostEmail: hostel.ownerId?.email || "",
       hostResponseTime: "Usually within 2 hours",
+      latitude: hostel.latitude || null,
+      longitude: hostel.longitude || null,
       roomTypes,
       availableRooms,
       totalRooms,
@@ -114,7 +127,7 @@ export default function HostelDetail() {
     : null;
   const roomIsAvailable = mapped && selectedRoom !== null
     ? Boolean(mapped.roomTypes[selectedRoom]?.available)
-    : mapped?.availableRooms > 0;
+    : false;
 
   const handleBook = () => {
     if (!user) {
@@ -125,8 +138,14 @@ export default function HostelDetail() {
       return;
     }
 
-    if (!mapped) {
-      setError("Hostel data is unavailable. Please try again.");
+    if (!mapped || selectedRoom === null) {
+      alert("Please select a room type before proceeding to payment.");
+      return;
+    }
+
+    const selectedRoomId = mapped.roomTypes[selectedRoom]?.id;
+    if (!selectedRoomId) {
+      alert("Please select a valid room type before proceeding.");
       return;
     }
 
@@ -135,7 +154,7 @@ export default function HostelDetail() {
     setTimeout(() => setShowBookingSuccess(false), 2000);
 
     router.push(
-      `/pay?hostelId=${encodeURIComponent(mapped._id)}&hostelName=${encodeURIComponent(mapped.name)}&roomName=${encodeURIComponent(displayRoomName || "Room")}&amount=${encodeURIComponent(String(displayPrice || 0))}&billing=${encodeURIComponent(displayBilling || "Yearly")}`
+      `/pay?hostelId=${encodeURIComponent(mapped._id)}&roomId=${encodeURIComponent(selectedRoomId)}&hostelName=${encodeURIComponent(mapped.name)}&roomName=${encodeURIComponent(displayRoomName || "Room")}&amount=${encodeURIComponent(String(displayPrice || 0))}&billing=${encodeURIComponent(displayBilling || "Yearly")}`
     );
   };
 
@@ -181,69 +200,7 @@ export default function HostelDetail() {
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
-
-      {/* ── Sticky top bar with back button ── */}
-      <header className="bg-white border-b border-gray-100 shadow-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 flex items-center justify-between h-14">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => router.back()}
-              className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-[#1E40AF] font-medium transition"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
-              </svg>
-              Back
-            </button>
-            <span className="text-gray-200">|</span>
-            <Link href="/" className="font-extrabold text-lg text-[#1E40AF]" style={{fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-              Hostel<span className="text-[#F59E0B]">Hub</span>
-            </Link>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {/* Save button */}
-            <button
-              onClick={async () => {
-                if (!user) {
-                  if (typeof window !== "undefined") {
-                    sessionStorage.setItem("redirectAfterLogin", window.location.pathname);
-                  }
-                  router.push("/login");
-                  return;
-                }
-
-                try {
-                  await studentAPI.saveHostel(id);
-                  setSaved(s => !s);
-                } catch (e) {
-                  console.error(e);
-                  setError(e.message || "Unable to update favourites.");
-                }
-              }}
-              className={`flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-xl border transition-all ${
-                saved ? "border-red-200 bg-red-50 text-red-500" : "border-gray-200 bg-white text-gray-500 hover:border-red-200 hover:text-red-400"
-              }`}
-            >
-              <svg className="w-4 h-4" fill={saved ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
-              </svg>
-              {saved ? "Saved" : "Save"}
-            </button>
-
-            {user ? (
-              <Link href={user.role === "host" ? "/host/dashboard" : "/student/dashboard"}
-                className="text-sm font-semibold text-[#1E40AF] border border-[#1E40AF] px-3 py-1.5 rounded-xl hover:bg-blue-50 transition">
-                My Dashboard
-              </Link>
-            ) : (
-              <Link href="/login" className="text-sm font-semibold bg-[#1E40AF] text-white px-4 py-1.5 rounded-xl hover:bg-[#1e3a8a] transition">
-                Sign In
-              </Link>
-            )}
-          </div>
-        </div>
-      </header>
+      <Navbar/>
 
       {/* Booking success toast */}
       {showBookingSuccess && (
@@ -317,6 +274,36 @@ export default function HostelDetail() {
                 </div>
               </div>
               <StarRating rating={mapped.hostRating}/>
+              {/* Save button */}
+              <div className="flex justify-end">
+                <button
+                  onClick={async () => {
+                    if (!user) {
+                      if (typeof window !== "undefined") {
+                        sessionStorage.setItem("redirectAfterLogin", window.location.pathname);
+                      }
+                      router.push("/login");
+                      return;
+                    }
+
+                    try {
+                      await studentAPI.saveHostel(id);
+                      setSaved(s => !s);
+                    } catch (e) {
+                      console.error(e);
+                      setError(e.message || "Unable to update favourites.");
+                    }
+                  }}
+                  className={`flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-xl border transition-all ${
+                    saved ? "border-red-200 bg-red-50 text-red-500" : "border-gray-200 bg-white text-gray-500 hover:border-red-200 hover:text-red-400"
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill={saved ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+                  </svg>
+                  {saved ? "Saved" : "Save"}
+                </button>
+              </div>
               <div className="flex flex-wrap gap-2">
                 {[
                   { text: mapped.type || "Private", cls: "bg-blue-50 text-[#1E40AF]" },
@@ -351,7 +338,7 @@ export default function HostelDetail() {
                 {mapped.roomTypes.map((room, idx) => (
                   <div
                     key={idx}
-                    onClick={() => setSelectedRoom(selectedRoom === idx ? null : idx)}
+                    onClick={() => setSelectedRoom(idx)}
                     className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${
                       selectedRoom === idx
                         ? "border-[#1E40AF] bg-blue-50 shadow-sm"
@@ -397,15 +384,31 @@ export default function HostelDetail() {
 
             {/* Location */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-              <h2 className="font-bold text-gray-800 mb-4" style={{fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Location</h2>
-              <div className="bg-blue-50 rounded-xl h-48 flex flex-col items-center justify-center gap-2 border border-blue-100">
-                <svg className="w-10 h-10 text-[#1E40AF]" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/>
-                </svg>
-                <p className="font-bold text-[#1E40AF]">{mapped.address || "Address not set"}</p>
-                <p className="text-sm text-gray-500">{mapped.landmark || ""}</p>
-                <p className="text-xs text-gray-400">{mapped.ghanaPost ? `GhanaPost: ${mapped.ghanaPost}` : ""}</p>
-              </div>
+              <h2 className="font-bold text-gray-800 mb-4" style={{fontFamily:"'Plus Jakarta Sans',sans-serif"}}>📍 Location</h2>
+              {mapped.latitude && mapped.longitude ? (
+                <div className="space-y-3">
+                  <LocationMap
+                    selectedLocation={{ lat: mapped.latitude, lng: mapped.longitude }}
+                    onLocationSelect={() => {}}
+                  />
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-1.5">
+                    <p className="text-xs font-semibold text-[#1E40AF]">📌 Pinned Location</p>
+                    <p className="text-sm text-gray-700 font-medium">{mapped.address || "Address not set"}</p>
+                    {mapped.landmark && <p className="text-xs text-gray-600">Near: {mapped.landmark}</p>}
+                    {mapped.ghanaPost && <p className="text-xs text-gray-600">GhanaPost: {mapped.ghanaPost}</p>}
+                    <p className="text-xs text-gray-500 mt-1">Coordinates: {mapped.latitude.toFixed(4)}, {mapped.longitude.toFixed(4)}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-gray-50 rounded-xl h-48 flex flex-col items-center justify-center gap-2 border border-gray-100">
+                  <svg className="w-10 h-10 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/>
+                  </svg>
+                  <p className="font-bold text-gray-600">{mapped.address || "Address not set"}</p>
+                  <p className="text-sm text-gray-500">{mapped.landmark || ""}</p>
+                  <p className="text-xs text-gray-400">{mapped.ghanaPost ? `GhanaPost: ${mapped.ghanaPost}` : "Map not available"}</p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -464,7 +467,7 @@ export default function HostelDetail() {
                     : "bg-gray-200 text-gray-400 cursor-not-allowed"
                 }`}
               >
-                {!user ? "Sign In to Book" : selectedRoom !== null ? `Pay for ${mapped.roomTypes[selectedRoom].name}` : "Pay Now"}
+                {!user ? "Sign In to Book" : selectedRoom !== null ? `Pay for ${mapped.roomTypes[selectedRoom].name}` : "Select a room to pay"}
               </button>
 
               <button
@@ -530,6 +533,8 @@ export default function HostelDetail() {
           </div>
         </div>
       </div>
+
+      <Footer/>
     </div>
   );
 }

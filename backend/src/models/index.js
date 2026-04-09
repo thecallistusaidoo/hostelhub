@@ -12,7 +12,7 @@ const studentSchema = new mongoose.Schema({
   program:      { type: String, required: true },
   year:         { type: String, enum: ["L100","L200","L300","L400"], required: true },
   savedHostels: [{ type: mongoose.Schema.Types.ObjectId, ref: "Hostel" }],
-  recentViews:  [{ type: mongoose.Schema.Types.ObjectId, ref: "Hostel" }], // last 10
+  recentViews:  [{ type: mongoose.Schema.Types.ObjectId, ref: "Hostel" }],
   avatar:       { type: String, default: "" },
   role:         { type: String, default: "student" },
   refreshToken: { type: String, select: false },
@@ -36,13 +36,23 @@ const hostSchema = new mongoose.Schema({
   hostelIds:    [{ type: mongoose.Schema.Types.ObjectId, ref: "Hostel" }],
   verified:     { type: Boolean, default: false },
   avatar:       { type: String, default: "" },
-  // Payout info
-  payoutMethod:   { type: String, enum: ["bank","momo",""], default: "" },
-  bankName:       { type: String, default: "" },
-  accountNumber:  { type: String, default: "" },
-  accountName:    { type: String, default: "" },
-  momoNetwork:    { type: String, default: "" },
-  momoNumber:     { type: String, default: "" },
+
+  // ── Payout information (what the host enters) ──────────────────────────────
+  payoutMethod:  { type: String, enum: ["bank", "momo", ""], default: "" },
+  // Bank fields
+  bankName:      { type: String, default: "" },
+  bankCode:      { type: String, default: "" },   // Paystack bank code e.g. "030" for GCB
+  accountNumber: { type: String, default: "" },
+  accountName:   { type: String, default: "" },   // Verified by Paystack
+  // MoMo fields
+  momoNetwork:   { type: String, default: "" },   // "mtn", "vod", "tgo"
+  momoNumber:    { type: String, default: "" },
+
+  // ── Paystack recipient (set automatically when host saves payout info) ──────
+  paystackRecipientCode: { type: String, default: "" },  // e.g. "RCP_xxxxxxxxxxxx"
+  paystackRecipientId:   { type: Number, default: null }, // Paystack internal ID
+  payoutSetupComplete:   { type: Boolean, default: false },
+
   role:         { type: String, default: "host" },
   refreshToken: { type: String, select: false },
 }, { timestamps: true });
@@ -85,23 +95,24 @@ const hostelSchema = new mongoose.Schema({
 
 // ─── ROOM ─────────────────────────────────────────────────────────────────────
 const roomSchema = new mongoose.Schema({
-  hostelId:        { type: mongoose.Schema.Types.ObjectId, ref: "Hostel", required: true },
-  name:            { type: String, required: true },
-  price:           { type: Number, required: true },
-  billing:         { type: String, enum: ["Yearly","Semester"], default: "Yearly" },
-  capacity:        { type: Number, required: true },
-  currentOccupancy:{ type: Number, default: 0 },
-  bathroom:        { type: String, default: "Shared" },
-  status:          { type: String, enum: ["available","booked","inactive"], default: "available" },
+  hostelId:         { type: mongoose.Schema.Types.ObjectId, ref: "Hostel", required: true },
+  name:             { type: String, required: true },
+  price:            { type: Number, required: true },
+  billing:          { type: String, enum: ["Yearly","Semester"], default: "Yearly" },
+  capacity:         { type: Number, required: true },
+  currentOccupancy: { type: Number, default: 0 },
+  bathroom:         { type: String, default: "Shared" },
+  status:           { type: String, enum: ["available","booked","inactive"], default: "available" },
 }, { timestamps: true });
 
 // ─── BOOKING ──────────────────────────────────────────────────────────────────
 const bookingSchema = new mongoose.Schema({
-  studentId: { type: mongoose.Schema.Types.ObjectId, ref: "Student", required: true },
-  hostelId:  { type: mongoose.Schema.Types.ObjectId, ref: "Hostel", required: true },
-  roomId:    { type: mongoose.Schema.Types.ObjectId, ref: "Room" },
-  status:    { type: String, enum: ["pending","approved","rejected"], default: "pending" },
-  message:   { type: String, default: "" },
+  studentId:  { type: mongoose.Schema.Types.ObjectId, ref: "Student", required: true },
+  hostelId:   { type: mongoose.Schema.Types.ObjectId, ref: "Hostel",  required: true },
+  roomId:     { type: mongoose.Schema.Types.ObjectId, ref: "Room" },
+  status:     { type: String, enum: ["pending","approved","rejected","paid"], default: "pending" },
+  message:    { type: String, default: "" },
+  paymentRef: { type: String, default: "" },
 }, { timestamps: true });
 
 // ─── MESSAGE ──────────────────────────────────────────────────────────────────
@@ -117,16 +128,32 @@ const messageSchema = new mongoose.Schema({
 
 // ─── PAYMENT ──────────────────────────────────────────────────────────────────
 const paymentSchema = new mongoose.Schema({
-  reference:      { type: String, required: true, unique: true },
-  studentId:      { type: mongoose.Schema.Types.ObjectId, ref: "Student", required: true },
-  hostelId:       { type: mongoose.Schema.Types.ObjectId, ref: "Hostel", required: true },
-  bookingId:      { type: mongoose.Schema.Types.ObjectId, ref: "Booking" },
-  roomName:       { type: String },
-  amountPaid:     { type: Number, required: true },
-  platformFee:    { type: Number, required: true },
-  hostPayout:     { type: Number, required: true },
-  paystackStatus: { type: String, enum: ["pending","success","failed"], default: "pending" },
-  settled:        { type: Boolean, default: false },
+  // What was paid
+  reference:         { type: String, required: true, unique: true },  // e.g. "HH-1234567890-ABCDEF"
+  studentId:         { type: mongoose.Schema.Types.ObjectId, ref: "Student", required: true },
+  hostelId:          { type: mongoose.Schema.Types.ObjectId, ref: "Hostel",  required: true },
+  hostId:            { type: mongoose.Schema.Types.ObjectId, ref: "Host",    required: true },
+  bookingId:         { type: mongoose.Schema.Types.ObjectId, ref: "Booking" },
+  roomName:          { type: String, default: "" },
+  amountPaid:        { type: Number, required: true },    // Full amount in GH₵
+  amountPaidPesewas: { type: Number, required: true },    // Full amount in pesewas (amountPaid * 100)
+
+  // Fee split
+  platformFeePercent:{ type: Number, default: 5 },
+  platformFee:       { type: Number, required: true },    // 5% in GH₵ — stays in your Paystack balance
+  hostPayout:        { type: Number, required: true },    // 95% in GH₵ — transferred to host
+
+  // Paystack charge status (money hitting your account)
+  paystackChargeStatus: { type: String, enum: ["pending","success","failed"], default: "pending" },
+
+  // Transfer to host status (money going from your account to host)
+  transferReference:  { type: String, default: "" },      // Paystack transfer reference
+  transferCode:       { type: String, default: "" },      // Paystack transfer_code
+  transferStatus:     { type: String, enum: ["pending","initiated","success","failed","reversed",""], default: "" },
+
+  // Settled means host has been paid
+  settled:           { type: Boolean, default: false },
+  settledAt:         { type: Date },
 }, { timestamps: true });
 
 module.exports = {

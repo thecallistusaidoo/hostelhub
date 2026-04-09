@@ -54,14 +54,16 @@ router.get("/inbox", protect, async (req, res, next) => {
     const conversations = [];
     for (const msg of all) {
       const partner = msg.senderId._id.toString() === me ? msg.receiverId : msg.senderId;
+      if (!partner) continue; // Skip if partner is null (user deleted)
       const partnerId = partner._id.toString();
       if (!seen.has(partnerId)) {
         seen.add(partnerId);
-        const unread = all.filter(m =>
-          m.senderId._id.toString() === partnerId &&
-          m.receiverId._id.toString() === me &&
-          !m.read
-        ).length;
+        const unread = all.filter(m => {
+          if (!m.senderId || !m.receiverId) return false;
+          return m.senderId._id.toString() === partnerId &&
+            m.receiverId._id.toString() === me &&
+            !m.read;
+        }).length;
         conversations.push({
           partnerId,
           partnerName: partner.firstName

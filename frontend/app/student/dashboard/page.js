@@ -1,11 +1,12 @@
 "use client";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { Suspense, useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { student as studentAPI, getUser, clearAuth } from "../../lib/api";
 
 const TABS = [
   { id:"dashboard",   label:"Dashboard",   icon:"🏠" },
+  { id:"bookings",    label:"My Bookings", icon:"📋" },
   { id:"browse",      label:"Browse",      icon:"🔍" },
   { id:"messages",    label:"Messages",    icon:"💬" },
   { id:"favourites",  label:"Favourites",  icon:"❤️" },
@@ -20,6 +21,162 @@ function Empty({ icon, title, subtitle, action }) {
       <p className="font-semibold text-gray-600 text-base">{title}</p>
       {subtitle && <p className="text-sm mt-1">{subtitle}</p>}
       {action && <div className="mt-4">{action}</div>}
+    </div>
+  );
+}
+
+// ── BOOKINGS TAB ──────────────────────────────────────────────────────────────
+function BookingsTab({ profile }) {
+  const [bookings, setBookings] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadBookings();
+  }, []);
+
+  const loadBookings = async () => {
+    try {
+      const data = await studentAPI.bookings();
+      setBookings(data.bookings || []);
+    } catch (err) {
+      console.error("Failed to load bookings:", err);
+      setBookings([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const downloadReceipt = async (booking) => {
+    try {
+      // Generate receipt PDF
+      const { jsPDF } = await import('jspdf');
+      const doc = new jsPDF();
+
+      // Header
+      doc.setFontSize(20);
+      doc.text('HostelHub - Payment Receipt', 20, 30);
+
+      // Receipt details
+      doc.setFontSize(12);
+      doc.text(`Receipt Number: ${booking.paymentReference || booking._id}`, 20, 50);
+      doc.text(`Date: ${new Date(booking.updatedAt || booking.createdAt).toLocaleDateString()}`, 20, 60);
+      doc.text(`Student: ${profile.firstName} ${profile.lastName}`, 20, 70);
+      doc.text(`Email: ${profile.email}`, 20, 80);
+
+      // Booking details
+      doc.text('Booking Details:', 20, 100);
+      doc.text(`Hostel: ${booking.hostelId?.name || 'N/A'}`, 20, 110);
+      doc.text(`Location: ${booking.hostelId?.location || 'N/A'}`, 20, 120);
+      doc.text(`Room: ${booking.roomId?.name || 'N/A'}`, 20, 130);
+      doc.text(`Status: ${booking.status}`, 20, 140);
+
+      // Payment details (if paid)
+      if (booking.status === 'paid' && booking.payment) {
+        doc.text('Payment Details:', 20, 160);
+        doc.text(`Amount Paid: GH₵${booking.payment.amountPaid?.toLocaleString() || 'N/A'}`, 20, 170);
+        doc.text(`Platform Fee (5%): GH₵${booking.payment.platformFee?.toLocaleString() || 'N/A'}`, 20, 180);
+        doc.text(`Host Payout: GH₵${booking.payment.hostPayout?.toLocaleString() || 'N/A'}`, 20, 190);
+        doc.text(`Reference: ${booking.paymentReference}`, 20, 200);
+      }
+
+      // Footer
+      doc.setFontSize(10);
+      doc.text('Thank you for using HostelHub!', 20, 250);
+      doc.text('For support, contact support@hostelhub.com', 20, 260);
+
+      // Save the PDF
+      doc.save(`HostelHub_Receipt_${booking.paymentReference || booking._id}.pdf`);
+    } catch (err) {
+      console.error('Failed to generate receipt:', err);
+      alert('Failed to download receipt. Please try again.');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="w-8 h-8 border-4 border-[#1E40AF] border-t-transparent rounded-full animate-spin"/>
+      </div>
+    );
+  }
+
+  const statusColors = {
+    pending: "bg-amber-50 text-amber-700 border-amber-200",
+    approved: "bg-blue-50 text-blue-700 border-blue-200",
+    rejected: "bg-red-50 text-red-700 border-red-200",
+    paid: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-extrabold text-gray-900" style={{fontFamily:"'Plus Jakarta Sans',sans-serif"}}>My Bookings</h1>
+        <div className="text-sm text-gray-500">
+          {bookings.length} booking{bookings.length !== 1 ? 's' : ''}
+        </div>
+      </div>
+
+      {bookings.length === 0 ? (
+        <Empty icon="📋" title="No bookings yet" subtitle="Book a hostel to see your bookings here."
+          action={<Link href="/" className="text-sm text-[#1E40AF] font-semibold hover:underline">Browse Hostels</Link>}/>
+      ) : (
+        <div className="space-y-4">
+          {bookings.map(booking => (
+            <div key={booking._id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h3 className="font-bold text-lg text-gray-900">{booking.hostelId?.name || 'Hostel'}</h3>
+                  <p className="text-sm text-gray-500">{booking.hostelId?.location || 'Location'}</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Booked on {new Date(booking.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <span className={`text-xs font-semibold px-3 py-1 rounded-full border ${statusColors[booking.status] || 'bg-gray-50 text-gray-700 border-gray-200'}`}>
+                  {booking.status}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Room</p>
+                  <p className="text-sm text-gray-500">{booking.roomId?.name || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Price</p>
+                  <p className="text-sm text-gray-500">
+                    {booking.roomId?.price ? `GH₵${booking.roomId.price.toLocaleString()}` : 'N/A'}
+                    {booking.roomId?.billing && `/${booking.roomId.billing.toLowerCase()}`}
+                  </p>
+                </div>
+              </div>
+
+              {booking.status === 'paid' && (
+                <div className="border-t border-gray-100 pt-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Payment Reference</p>
+                      <p className="text-xs text-gray-500 font-mono">{booking.paymentReference}</p>
+                    </div>
+                    <button
+                      onClick={() => downloadReceipt(booking)}
+                      className="bg-[#1E40AF] hover:bg-[#1e3a8a] text-white text-sm font-semibold px-4 py-2 rounded-xl transition"
+                    >
+                      📄 Download Receipt
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {booking.message && (
+                <div className="border-t border-gray-100 pt-4 mt-4">
+                  <p className="text-sm font-medium text-gray-700">Message</p>
+                  <p className="text-sm text-gray-500">{booking.message}</p>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -327,8 +484,8 @@ function SettingsTab({ profile, onLogout }) {
   );
 }
 
-// ── MAIN DASHBOARD ────────────────────────────────────────────────────────────
-export default function StudentDashboard() {
+// ── DASHBOARD CONTENT (with useSearchParams) ───────────────────────────────────
+function StudentDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard");
@@ -339,6 +496,11 @@ export default function StudentDashboard() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [messages, setMessages] = useState([]);
+  const [dashboardPartnerId, setDashboardPartnerId] = useState(null);
+  const [dashboardPartnerName, setDashboardPartnerName] = useState(null);
+  const [dashboardHostelId, setDashboardHostelId] = useState(null);
+  const [dashboardHostelName, setDashboardHostelName] = useState(null);
 
   const loadProfile = useCallback(async () => {
     try {
@@ -351,6 +513,15 @@ export default function StudentDashboard() {
     }
   }, [router]);
 
+  const loadMessages = useCallback(async () => {
+    try {
+      const data = await studentAPI.inbox();
+      setMessages(data.conversations || []);
+    } catch {
+      setMessages([]);
+    }
+  }, []);
+
   useEffect(() => {
     setActiveTab(searchParams.get("tab") || "dashboard");
   }, [searchParams]);
@@ -359,14 +530,17 @@ export default function StudentDashboard() {
     const user = getUser();
     if (!user || user.role !== "student") { router.push("/login"); return; }
     loadProfile();
-  }, [loadProfile, router]);
+    loadMessages();
+  }, [loadProfile, loadMessages, router]);
 
   // Poll unread count every 30s
   useEffect(() => {
     const poll = async () => {
       try {
         const data = await studentAPI.inbox();
-        const count = (data.conversations || []).reduce((s, c) => s + c.unread, 0);
+        const convs = data.conversations || [];
+        setMessages(convs);
+        const count = convs.reduce((s, c) => s + c.unread, 0);
         setUnreadCount(count);
       } catch {}
     };
@@ -520,34 +694,76 @@ export default function StudentDashboard() {
                 )}
               </div>
 
-              {/* Messages preview */}
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-bold text-gray-800" style={{fontFamily:"'Plus Jakarta Sans',sans-serif"}}>💬 Messages</h2>
-                  <button onClick={() => setActiveTab("messages")} className="text-xs text-[#1E40AF] font-semibold hover:underline">View all</button>
+              {/* Recent messages */}
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="font-bold text-gray-800">Recent Messages</h2>
+                    <button onClick={() => setActiveTab("messages")} className="text-xs text-[#1E40AF] font-semibold hover:underline">View all</button>
+                  </div>
+                  {(() => {
+                    // Group by partner and take latest conversation per partner
+                    const grouped = {};
+                    messages.forEach(conv => {
+                      if (!conv.partnerId) return;
+                      if (!grouped[conv.partnerId] || new Date(conv.latestTime) > new Date(grouped[conv.partnerId].latestTime)) {
+                        grouped[conv.partnerId] = conv;
+                      }
+                    });
+                    const recent = Object.values(grouped).sort((a,b) => new Date(b.latestTime) - new Date(a.latestTime)).slice(0,3);
+                    return recent.length === 0 ? <Empty icon="💬" title="No messages yet"/> : recent.map(conv => (
+                      <div key={conv.partnerId} onClick={() => {
+                        setDashboardPartnerId(conv.partnerId);
+                        setDashboardPartnerName(conv.partnerName);
+                        setDashboardHostelId(conv.hostelId);
+                        setDashboardHostelName(conv.hostelName);
+                        setActiveTab("messages");
+                      }} className={`flex items-start gap-3 p-3 rounded-xl mb-2 cursor-pointer ${conv.unread > 0 ? "bg-amber-50" : "bg-gray-50"} hover:bg-gray-100 transition`}>
+                        <div className="w-8 h-8 rounded-full bg-[#1E40AF] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                          {conv.partnerName?.charAt(0) || "H"}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-sm text-gray-800">
+                            {conv.partnerName}
+                          </p>
+                          <p className="text-xs text-gray-500 truncate">{conv.latestMessage}</p>
+                        </div>
+                        {conv.unread > 0 && <div className="w-2 h-2 bg-[#F59E0B] rounded-full flex-shrink-0 mt-1.5"/>}
+                      </div>
+                    ));
+                  })()}
                 </div>
-                {unreadCount === 0 ? (
-                  <Empty icon="💬" title="No messages" subtitle="Chat with a host from any hostel detail page."/>
-                ) : (
-                  <button onClick={() => setActiveTab("messages")}
-                    className="w-full bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-sm text-[#1E40AF] font-semibold hover:bg-blue-100 transition text-left">
-                    You have {unreadCount} unread message{unreadCount !== 1 ? "s" : ""}. Click to view →
-                  </button>
-                )}
-              </div>
             </>
           )}
 
+          {activeTab === "bookings"   && <BookingsTab profile={profile}/>}
           {activeTab === "messages"   && <MessagesTab studentId={profile._id}
-              initialPartnerId={hostId}
-              initialPartnerName={hostName}
-              initialHostelId={hostelId}
-              initialHostelName={hostelName}
+              initialPartnerId={dashboardPartnerId || hostId}
+              initialPartnerName={dashboardPartnerName || hostName}
+              initialHostelId={dashboardHostelId || hostelId}
+              initialHostelName={dashboardHostelName || hostelName}
           />}
           {activeTab === "favourites" && <FavouritesTab savedHostels={savedHostels} onUnsave={handleUnsave}/>}
           {activeTab === "settings"   && <SettingsTab profile={profile} onLogout={handleLogout}/>}
         </div>
       </main>
     </div>
+  );
+}
+
+// ── LOADING FALLBACK ────────────────────────────────────────────────────────────
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="w-8 h-8 border-4 border-[#1E40AF] border-t-transparent rounded-full animate-spin"/>
+    </div>
+  );
+}
+
+// ── MAIN EXPORT ────────────────────────────────────────────────────────────────
+export default function StudentDashboard() {
+  return (
+    <Suspense fallback={<LoadingFallback/>}>
+      <StudentDashboardContent/>
+    </Suspense>
   );
 }

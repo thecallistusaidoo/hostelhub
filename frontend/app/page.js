@@ -123,7 +123,7 @@ export default function Home() {
           {/* Pill */}
           <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#F59E0B] bg-[#F59E0B]/15 border border-[#F59E0B]/25 px-4 py-2 rounded-full mb-6">
             <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B] animate-pulse"/>
-            UMaT Verified Hostels
+            Verified Hostels
           </span>
 
           <h1 className="text-3xl md:text-5xl lg:text-6xl font-extrabold text-white leading-tight mb-4" style={{fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
@@ -131,7 +131,7 @@ export default function Home() {
             <span className="text-[#F59E0B]">Student Hostel</span>
           </h1>
           <p className="text-blue-200/80 text-base md:text-lg mb-10 max-w-xl mx-auto">
-            Browse verified hostels near UMaT campus. Compare prices, amenities, and secure your room today.
+            Browse verified hostels near campus. Compare prices, amenities, and secure your room today.
           </p>
 
           {/* Search bar */}
@@ -270,7 +270,7 @@ export default function Home() {
         <div className="absolute inset-0 opacity-10" style={{backgroundImage:"radial-gradient(circle at 20% 50%, white 0%, transparent 60%),"}}/>
         <div className="relative max-w-2xl mx-auto px-4 text-center">
           <h2 className="text-2xl md:text-3xl font-extrabold text-white mb-3" style={{fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
-            Own a hostel near UMaT?
+            Own a hostel?
           </h2>
           <p className="text-white/80 text-sm mb-6">
             Join HostelHub and reach thousands of students every semester. Listing is completely free.

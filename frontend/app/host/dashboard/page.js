@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { Suspense, useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { host as hostAPI, getUser, clearAuth } from "../../lib/api";
@@ -102,20 +102,32 @@ function OverviewTab({ dashData, setActiveTab, setInitialPartnerId }) {
             <h2 className="font-bold text-gray-800">Recent Messages</h2>
             <button onClick={() => setActiveTab("messages")} className="text-xs text-[#1E40AF] font-semibold hover:underline">View all</button>
           </div>
-          {messages.length === 0 ? <Empty icon="💬" title="No messages yet"/> : messages.slice(0,3).map(m => (
-            <div key={m._id} onClick={() => { setInitialPartnerId(m.senderId._id); setActiveTab("messages"); }} className={`flex items-start gap-3 p-3 rounded-xl mb-2 cursor-pointer ${!m.read ? "bg-amber-50" : "bg-gray-50"} hover:bg-gray-100 transition`}>
-              <div className="w-8 h-8 rounded-full bg-[#1E40AF] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                {(m.senderId?.firstName || m.senderId?.fullName || "S").charAt(0)}
+          {(() => {
+            // Group by sender and take latest message per sender
+            const grouped = {};
+            messages.forEach(m => {
+              if (!m.senderId) return; // Skip messages from deleted users
+              const senderId = m.senderId._id;
+              if (!grouped[senderId] || new Date(m.createdAt) > new Date(grouped[senderId].createdAt)) {
+                grouped[senderId] = m;
+              }
+            });
+            const recent = Object.values(grouped).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0,3);
+            return recent.length === 0 ? <Empty icon="💬" title="No messages yet"/> : recent.map(m => (
+              <div key={m._id} onClick={() => { setInitialPartnerId(m.senderId._id); setActiveTab("messages"); }} className={`flex items-start gap-3 p-3 rounded-xl mb-2 cursor-pointer ${!m.read ? "bg-amber-50" : "bg-gray-50"} hover:bg-gray-100 transition`}>
+                <div className="w-8 h-8 rounded-full bg-[#1E40AF] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                  {(m.senderId?.firstName || m.senderId?.fullName || "S").charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm text-gray-800">
+                    {m.senderId?.firstName ? `${m.senderId.firstName} ${m.senderId.lastName}` : m.senderId?.fullName || "Student"}
+                  </p>
+                  <p className="text-xs text-gray-500 truncate">{m.body}</p>
+                </div>
+                {!m.read && <div className="w-2 h-2 bg-[#F59E0B] rounded-full flex-shrink-0 mt-1.5"/>}
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-sm text-gray-800">
-                  {m.senderId?.firstName ? `${m.senderId.firstName} ${m.senderId.lastName}` : m.senderId?.fullName || "Student"}
-                </p>
-                <p className="text-xs text-gray-500 truncate">{m.body}</p>
-              </div>
-              {!m.read && <div className="w-2 h-2 bg-[#F59E0B] rounded-full flex-shrink-0 mt-1.5"/>}
-            </div>
-          ))}
+            ));
+          })()}
         </div>
       </div>
 
@@ -548,7 +560,7 @@ function BookingsTab({ bookings, reload }) {
 }
 
 // ── MESSAGES ──────────────────────────────────────────────────────────────────
-function MessagesTab({ hostId, initialPartnerId }) {
+function MessagesTab({ hostId, initialPartnerId, reload }) {
   const [conversations, setConversations] = useState(null);
   const [active, setActive] = useState(null);
   const [thread, setThread] = useState([]);
@@ -605,6 +617,7 @@ function MessagesTab({ hostId, initialPartnerId }) {
       setReply("");
       const data = await hostAPI.conversation(active.partnerId);
       setThread(data.messages || []);
+      if (reload) reload();
     } catch(e) { alert(e.message); }
     finally { setSending(false); }
   };
@@ -859,14 +872,15 @@ function SettingsTab({ hostProfile, reload, onLogout }) {
         <h2 className="font-bold text-gray-800 mb-5" style={{fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Change Password</h2>
         {pwMsg && <div className={`rounded-xl px-4 py-3 text-sm mb-4 ${pwMsg.ok ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"}`}>{pwMsg.m}</div>}
         <div className="space-y-4 max-w-sm">
-          {[["Current Password","current"],["New Password","newP"],["Confirm New Password","confirm"]].map(([l,k]) => (
+          {[["Current Password","current","off"],["New Password","newP","new-password"],["Confirm New Password","confirm","new-password"]].map(([l,k,auto]) => (
             <div key={k}>
               <label className="block text-xs font-semibold text-gray-600 mb-1">{l}</label>
-              <input type="password" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
-                value={passwords[k]} onChange={e => setPasswords(p=>({...p,[k]:e.target.value}))}/>
+              <input type="password" autoComplete={auto} className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                value={passwords[k]} onChange={e => setPasswords(p => ({...p, [k]:e.target.value}))}/>
             </div>
           ))}
-          <button onClick={changePassword} disabled={pwSaving} className="bg-[#1E40AF] hover:bg-[#1e3a8a] disabled:opacity-60 text-white font-semibold rounded-xl px-6 py-2.5 text-sm transition">
+          <button onClick={changePassword} disabled={pwSaving}
+            className="bg-[#1E40AF] hover:bg-[#1e3a8a] disabled:opacity-60 text-white font-semibold rounded-xl px-6 py-2.5 text-sm transition">
             {pwSaving ? "Updating..." : "Update Password"}
           </button>
         </div>
@@ -881,8 +895,8 @@ function SettingsTab({ hostProfile, reload, onLogout }) {
   );
 }
 
-// ── MAIN ──────────────────────────────────────────────────────────────────────
-export default function HostDashboard() {
+// ── DASHBOARD CONTENT (with useSearchParams) ───────────────────────────────────
+function HostDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState("overview");
@@ -971,10 +985,28 @@ export default function HostDashboard() {
         {activeTab === "overview"  && <OverviewTab  dashData={dashData} setActiveTab={setActiveTab} setInitialPartnerId={setInitialPartnerId}/>}
         {activeTab === "hostels"   && <MyHostelsTab hostels={dashData.hostels} rooms={dashData.rooms} reload={loadData}/>}
         {activeTab === "bookings"  && <BookingsTab  bookings={dashData.bookings} reload={loadData}/>}
-        {activeTab === "messages"  && <MessagesTab  hostId={hostProfile._id} initialPartnerId={initialPartnerId}/>}
+        {activeTab === "messages"  && <MessagesTab  hostId={hostProfile._id} initialPartnerId={initialPartnerId} reload={loadData}/>}
         {activeTab === "payments"  && <PaymentsTab  hostProfile={hostProfile} reload={loadData}/>}
         {activeTab === "settings"  && <SettingsTab  hostProfile={hostProfile} reload={loadData} onLogout={handleLogout}/>}
       </main>
     </div>
+  );
+}
+
+// ── LOADING FALLBACK ────────────────────────────────────────────────────────────
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="w-8 h-8 border-4 border-[#F59E0B] border-t-transparent rounded-full animate-spin"/>
+    </div>
+  );
+}
+
+// ── MAIN EXPORT ────────────────────────────────────────────────────────────────
+export default function HostDashboard() {
+  return (
+    <Suspense fallback={<LoadingFallback/>}>
+      <HostDashboardContent/>
+    </Suspense>
   );
 }

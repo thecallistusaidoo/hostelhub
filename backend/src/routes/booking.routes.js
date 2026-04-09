@@ -12,6 +12,9 @@ router.post("/", protect, restrictTo("student"), validate(bookingSchema), async 
     const hostel = await Hostel.findOne({ _id: hostelId, status: "approved" });
     if (!hostel) return res.status(404).json({ message: "Hostel not found." });
 
+    const room = await Room.findOne({ _id: roomId, hostelId });
+    if (!room) return res.status(404).json({ message: "Selected room not found for this hostel." });
+
     // Prevent duplicate pending booking
     const existing = await Booking.findOne({
       studentId: req.user.id, hostelId, status: "pending",

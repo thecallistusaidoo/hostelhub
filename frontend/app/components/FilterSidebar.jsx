@@ -2,7 +2,7 @@
 import { useState } from "react";
 
 const AMENITIES = ["WiFi","Water","Electricity","Generator","Kitchen","Security","AC","Laundry","Parking","Wardrobe"];
-const LOCATIONS = ["All","Umat","Tarkwa"];
+const LOCATIONS = ["All","Essikado","Ketan","BU","Mempeasem"];
 const GENDERS   = ["All","Mixed","Male Only","Female Only"];
 const SORT_OPT  = ["Newest","Lowest Price","Highest Price","Highest Rated","Most Viewed"];
 
@@ -76,7 +76,7 @@ export default function FilterSidebar({ filters, setFilters }) {
 
       <Section id="location" title="Location">
         <div className="flex flex-wrap gap-2">
-          {LOCATIONS.map(l => <Pill key={l} label={l === "All" ? "🏘 All" : l === "Umat" ? "🎓 Near UMaT" : "🏙 Tarkwa"} active={filters.location === l} onClick={() => setFilters(f => ({...f, location:l}))}/>)}
+          {LOCATIONS.map(l => <Pill key={l} label={l === "All" ? "🏘 All" : l === "Essikado" ? "🎓 Near UMaT" : "🏙 Ketan"} active={filters.location === l} onClick={() => setFilters(f => ({...f, location:l}))}/>)}
         </div>
       </Section>
 

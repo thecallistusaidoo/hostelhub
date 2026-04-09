@@ -29,7 +29,7 @@ export default function Footer() {
               The #1 hostel discovery platform for UMaT students. Find verified, affordable accommodation near campus — fast.
             </p>
             <div className="flex items-center gap-3 mt-5">
-              <span className="text-xs text-blue-300/60 uppercase tracking-widest font-semibold">UMaT · Tarkwa · Ghana</span>
+              <span className="text-xs text-blue-300/60 uppercase tracking-widest font-semibold">Ghana</span>
             </div>
           </div>
 

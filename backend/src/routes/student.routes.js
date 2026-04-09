@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { Student, Hostel, Booking, Message } = require("../models");
+const { Student, Hostel, Booking, Message, Payment } = require("../models");
 const { protect, restrictTo } = require("../middleware");
 
 router.use(protect, restrictTo("student"));
@@ -85,6 +85,22 @@ router.get("/bookings", async (req, res, next) => {
       .populate("hostelId", "name location city images")
       .populate("roomId", "name price billing")
       .sort({ createdAt: -1 });
+
+    // For paid bookings, attach payment info
+    for (const booking of bookings) {
+      if (booking.status === "paid" && booking.paymentReference) {
+        const payment = await Payment.findOne({ reference: booking.paymentReference });
+        if (payment) {
+          booking.payment = {
+            amountPaid: payment.amountPaid,
+            platformFee: payment.platformFee,
+            hostPayout: payment.hostPayout,
+            paystackStatus: payment.paystackStatus,
+          };
+        }
+      }
+    }
+
     res.json({ bookings });
   } catch (err) { next(err); }
 });

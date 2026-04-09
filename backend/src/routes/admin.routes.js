@@ -96,6 +96,22 @@ router.put("/hostels/:id/feature", async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// PUT /api/admin/hostels/:id/rating — set hostel rating
+router.put("/hostels/:id/rating", async (req, res, next) => {
+  try {
+    const { rating } = req.body;
+    if (rating === undefined || rating === null) return res.status(400).json({ message: "Rating is required." });
+    if (typeof rating !== "number" || rating < 0 || rating > 5) return res.status(400).json({ message: "Rating must be a number between 0 and 5." });
+    const hostel = await Hostel.findByIdAndUpdate(
+      req.params.id,
+      { hostRating: rating },
+      { new: true }
+    ).populate("ownerId", "fullName email");
+    if (!hostel) return res.status(404).json({ message: "Hostel not found." });
+    res.json({ message: `Rating set to ${rating}.`, hostel });
+  } catch (err) { next(err); }
+});
+
 // DELETE /api/admin/hostels/:id — remove hostel
 router.delete("/hostels/:id", async (req, res, next) => {
   try {

@@ -19,7 +19,7 @@ router.get("/me", async (req, res, next) => {
 // PUT /api/hosts/update-profile
 router.put("/update-profile", async (req, res, next) => {
   try {
-    const allowed = ["fullName","phone","payoutMethod","bankName","accountNumber","accountName","momoNetwork","momoNumber"];
+    const allowed = ["fullName","phone","payoutMethod","bankName","accountNumber","accountName","momoNetwork","momoNumber","paystackRecipientCode"];
     const updates = {};
     allowed.forEach(f => { if (req.body[f] !== undefined) updates[f] = req.body[f]; });
     const host = await Host.findByIdAndUpdate(req.user.id, updates, { new: true, runValidators: true }).select("-password -refreshToken");
@@ -102,7 +102,7 @@ router.put("/hostels/:id", async (req, res, next) => {
   try {
     const hostel = await Hostel.findOne({ _id: req.params.id, ownerId: req.user.id });
     if (!hostel) return res.status(404).json({ message: "Hostel not found or not yours." });
-    const allowed = ["name","description","amenities","priceFrom","priceTo","gender","isAvailable","rules","campusDistance","landmark","address"];
+    const allowed = ["name","description","location","amenities","priceFrom","priceTo","gender","isAvailable","rules","campusDistance","landmark","address"];
     allowed.forEach(f => { if (req.body[f] !== undefined) hostel[f] = req.body[f]; });
     await hostel.save();
     res.json({ message: "Hostel updated.", hostel });
