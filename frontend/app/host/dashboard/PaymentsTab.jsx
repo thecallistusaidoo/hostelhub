@@ -145,6 +145,12 @@ export default function PaymentsTab({ hostProfile, reload }) {
   const totalEarned  = earnings?.totalEarned  || 0;
   const totalPending = earnings?.totalPending || 0;
   const payments     = earnings?.payments     || [];
+  const getGatewayFee = (payment) => {
+    if (!payment) return 0;
+    if (payment.gatewayFee && payment.gatewayFee > 0) return payment.gatewayFee;
+    if (!payment.amountPaid || payment.amountPaid <= 0) return 0;
+    return Math.round(payment.amountPaid * 1.95) / 100;
+  };
 
   return (
     <div className="space-y-5">
@@ -404,7 +410,7 @@ export default function PaymentsTab({ hostProfile, reload }) {
                     </td>
                     <td className="px-4 py-3 text-[--text-secondary]">{p.roomName || p.hostelId?.name}</td>
                     <td className="px-4 py-3 font-bold text-[--text-primary]">GH₵{p.amountPaid?.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-amber-600 font-semibold">GH₵{(p.gatewayFee || 0).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-amber-600 font-semibold">GH₵{getGatewayFee(p).toLocaleString()}</td>
                     <td className="px-4 py-3 text-[--text-muted]">GH₵{p.platformFee?.toLocaleString()}</td>
                     <td className="px-4 py-3 font-bold text-emerald-600">GH₵{p.hostPayout?.toLocaleString()}</td>
                     <td className="px-4 py-3 text-[--text-muted]">{new Date(p.createdAt).toLocaleDateString()}</td>

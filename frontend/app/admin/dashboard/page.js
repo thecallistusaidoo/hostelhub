@@ -566,6 +566,20 @@ function PaymentsTab({ stats }) {
     }
   };
 
+  const getGatewayFee = (payment) => {
+    if (!payment) return 0;
+    if (payment.gatewayFee && payment.gatewayFee > 0) return payment.gatewayFee;
+    if (!payment.amountPaid || payment.amountPaid <= 0) return 0;
+    return Math.round(payment.amountPaid * 1.95) / 100;
+  };
+
+  const getNetAfterGateway = (payment) => {
+    if (!payment) return 0;
+    if (payment.netAfterGateway && payment.netAfterGateway > 0) return payment.netAfterGateway;
+    const fee = getGatewayFee(payment);
+    return Math.max(0, (payment.amountPaid || 0) - fee);
+  };
+
   if (payments === null) return <div className="flex justify-center py-20"><Spinner/></div>;
 
   return (
@@ -630,7 +644,7 @@ function PaymentsTab({ stats }) {
                     </td>
                     <td className="px-4 py-3 text-gray-500">{p.hostelId?.name || "—"}</td>
                     <td className="px-4 py-3 font-bold text-gray-800">GH₵{p.amountPaid?.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-amber-600 font-semibold">GH₵{(p.gatewayFee || 0).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-amber-600 font-semibold">GH₵{getGatewayFee(p).toLocaleString()}</td>
                     <td className="px-4 py-3 text-emerald-600 font-semibold">GH₵{p.platformFee?.toLocaleString()}</td>
                     <td className="px-4 py-3 text-[#1E40AF] font-semibold">GH₵{p.hostPayout?.toLocaleString()}</td>
                     <td className="px-4 py-3 text-gray-400">{new Date(p.createdAt).toLocaleDateString()}</td>
@@ -667,8 +681,8 @@ function PaymentsTab({ stats }) {
               <p><span className="text-gray-400">Host:</span> {selectedPayment.hostId?.fullName || "—"} ({selectedPayment.hostId?.email || "—"})</p>
               <p><span className="text-gray-400">Hostel:</span> {selectedPayment.hostelId?.name || "—"}</p>
               <p><span className="text-gray-400">Amount Paid:</span> GH₵{selectedPayment.amountPaid?.toLocaleString()}</p>
-              <p><span className="text-gray-400">Paystack Fee (1.95%):</span> GH₵{(selectedPayment.gatewayFee || 0).toLocaleString()}</p>
-              <p><span className="text-gray-400">Net After Paystack:</span> GH₵{(selectedPayment.netAfterGateway || selectedPayment.amountPaid || 0).toLocaleString()}</p>
+              <p><span className="text-gray-400">Paystack Fee (1.95%):</span> GH₵{getGatewayFee(selectedPayment).toLocaleString()}</p>
+              <p><span className="text-gray-400">Net After Paystack:</span> GH₵{getNetAfterGateway(selectedPayment).toLocaleString()}</p>
               <p><span className="text-gray-400">Platform Fee:</span> GH₵{selectedPayment.platformFee?.toLocaleString()}</p>
               <p><span className="text-gray-400">Host Payout:</span> GH₵{selectedPayment.hostPayout?.toLocaleString()}</p>
               <p><span className="text-gray-400">Charge Status:</span> {selectedPayment.paystackChargeStatus}</p>
