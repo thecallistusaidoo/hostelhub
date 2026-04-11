@@ -5,6 +5,16 @@ const { Reservation, Hostel, Room, Host, Student } = require("../models");
 const { protect, restrictTo } = require("../middleware");
 const { sendMeetupNotification } = require("../utils/notifications");
 
+async function syncRoomSlotAfterRelease(roomId) {
+  const room = await Room.findById(roomId);
+  if (!room || room.status === "inactive") return;
+  if (room.reservedRooms < 0) {
+    room.reservedRooms = 0;
+  }
+  room.status = room.availableRooms === 0 ? "fully_reserved" : "available";
+  await room.save();
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/reservations
 // Student creates a reservation for a hostel + room type
@@ -118,11 +128,8 @@ router.delete("/:id", protect, restrictTo("student"), async (req, res, next) => 
     reservation.status = "cancelled";
     await reservation.save();
 
-    // Free up the room slot
-    await Room.findByIdAndUpdate(reservation.roomId, {
-      $inc: { reservedRooms: -1 },
-      status: "available",
-    });
+    await Room.findByIdAndUpdate(reservation.roomId, { $inc: { reservedRooms: -1 } });
+    await syncRoomSlotAfterRelease(reservation.roomId);
 
     res.json({ message: "Reservation cancelled." });
   } catch (err) { next(err); }
@@ -249,10 +256,8 @@ router.put("/admin/:id/cancel", protect, restrictTo("admin"), async (req, res, n
 
     // Free room slot if reservation was active
     if (wasActive) {
-      await Room.findByIdAndUpdate(reservation.roomId, {
-        $inc: { reservedRooms: -1 },
-        status: "available",
-      });
+      await Room.findByIdAndUpdate(reservation.roomId, { $inc: { reservedRooms: -1 } });
+      await syncRoomSlotAfterRelease(reservation.roomId);
     }
 
     res.json({ message: "Reservation cancelled.", reservation });

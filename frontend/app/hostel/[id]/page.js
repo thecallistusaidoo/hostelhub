@@ -79,23 +79,40 @@ export default function HostelDetail() {
   useEffect(() => {
     if (selectedRoom !== null) return;
     if (!rooms.length) return;
-    const firstAvailable = rooms.findIndex(r => (r.status || "available") === "available");
-    setSelectedRoom(firstAvailable !== -1 ? firstAvailable : 0);
+    const idx = rooms.findIndex(r => {
+      if ((r.status || "") === "inactive") return false;
+      const cap = Math.max(1, Number(r.totalRooms) || 1);
+      const occ = Math.min(cap, Math.max(0, Number(r.reservedRooms) || 0));
+      return cap - occ > 0;
+    });
+    setSelectedRoom(idx !== -1 ? idx : 0);
   }, [rooms, selectedRoom]);
 
   const mapped = useMemo(() => {
     if (!hostel) return null;
 
-    const roomTypes = rooms.map(r => ({
-      id: r._id,
-      name: r.name,
-      price: Number(r.price || 0),
-      billing: r.billing || "Yearly",
-      available: (r.status || "available") === "available",
-    }));
+    const roomTypes = rooms.map(r => {
+      const slotsTotal = Math.max(1, Number(r.totalRooms) || 1);
+      const reserved = Math.min(slotsTotal, Math.max(0, Number(r.reservedRooms) || 0));
+      const slotsAvailable = slotsTotal - reserved;
+      const listed = (r.status || "available") !== "inactive";
+      return {
+        id: r._id,
+        name: r.name,
+        price: Number(r.price || 0),
+        billing: r.billing || "Yearly",
+        slotsTotal,
+        slotsAvailable,
+        available: listed && slotsAvailable > 0,
+      };
+    });
 
-    const availableRooms = roomTypes.filter(r => r.available).length;
-    const totalRooms = roomTypes.length || 1;
+    const totalSlotsInCategories = roomTypes.reduce((s, r) => s + r.slotsTotal, 0);
+    const summedOpen = roomTypes.reduce((s, r) => s + r.slotsAvailable, 0);
+    const totalSlotsAvailable = typeof hostel.totalAvailableRooms === "number"
+      ? hostel.totalAvailableRooms
+      : summedOpen;
+    const roomTypesWithOpenings = roomTypes.filter(r => r.available).length;
 
     return {
       ...hostel,
@@ -114,8 +131,9 @@ export default function HostelDetail() {
       latitude: hostel.latitude || null,
       longitude: hostel.longitude || null,
       roomTypes,
-      availableRooms,
-      totalRooms,
+      totalSlotsAvailable,
+      totalSlotsInCategories,
+      roomTypesWithOpenings,
     };
   }, [hostel, rooms]);
 
@@ -250,6 +268,11 @@ export default function HostelDetail() {
             <div>
               <p className="text-xs font-semibold text-gray-500 mb-1">Room</p>
               <p className="font-semibold text-gray-900">{displayRoomName} · GH₵{Number(displayPrice || 0).toLocaleString()}/{displayBilling === "Semester" ? "sem" : "yr"}</p>
+              {mapped.roomTypes[selectedRoom] && (
+                <p className="text-xs text-gray-500 mt-1">
+                  {mapped.roomTypes[selectedRoom].slotsAvailable} of {mapped.roomTypes[selectedRoom].slotsTotal} rooms open in this category — your reservation uses one spot.
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">Number of people</label>
@@ -371,7 +394,7 @@ export default function HostelDetail() {
                   { text: mapped.type || "Private", cls: "bg-blue-50 text-[#1E40AF]" },
                   { text: mapped.gender, cls: mapped.gender === "Female Only" ? "bg-pink-50 text-pink-600" : mapped.gender === "Male Only" ? "bg-blue-50 text-blue-700" : "bg-gray-100 text-gray-600" },
                   { text: `🚶 ${mapped.campusDistance || "Distance N/A"}`, cls: "bg-gray-100 text-gray-600" },
-                  { text: `${mapped.availableRooms} room type${mapped.availableRooms === 1 ? "" : "s"} available`, cls: "bg-green-50 text-green-600" },
+                  { text: `${mapped.totalSlotsAvailable} room${mapped.totalSlotsAvailable === 1 ? "" : "s"} available (all types)`, cls: "bg-green-50 text-green-600" },
                 ].map(b => (
                   <span key={b.text} className={`text-xs font-semibold px-3 py-1.5 rounded-full ${b.cls}`}>{b.text}</span>
                 ))}
@@ -416,12 +439,15 @@ export default function HostelDetail() {
                       <div>
                         <p className="font-semibold text-gray-800 text-sm">{room.name}</p>
                         <p className="text-xs text-gray-400 mt-0.5">Billed {room.billing}</p>
+                        <p className="text-xs font-semibold text-gray-600 mt-0.5">
+                          {room.slotsAvailable} of {room.slotsTotal} room{room.slotsTotal === 1 ? "" : "s"} available
+                        </p>
                       </div>
                     </div>
                     <div className="text-right">
                       <p className="font-extrabold text-[#1E40AF] text-base">GH₵{Number(room.price || 0).toLocaleString()}</p>
                       <span className={`text-xs font-semibold ${room.available ? "text-emerald-600" : "text-red-500"}`}>
-                        {room.available ? "✓ Available" : "✗ Fully Booked"}
+                        {room.available ? `✓ ${room.slotsAvailable} left` : "✗ Full"}
                       </span>
                     </div>
                   </div>
@@ -488,6 +514,11 @@ export default function HostelDetail() {
                     </div>
                     <p className="text-3xl font-extrabold text-[#1E40AF]">GH₵{Number(displayPrice || 0).toLocaleString()}</p>
                     <p className="text-xs text-gray-400">per {displayBilling === "Yearly" ? "year" : "semester"}</p>
+                    {mapped.roomTypes[selectedRoom] && (
+                      <p className="text-sm text-gray-600 mt-2 font-medium">
+                        {mapped.roomTypes[selectedRoom].slotsAvailable} of {mapped.roomTypes[selectedRoom].slotsTotal} rooms left in this category
+                      </p>
+                    )}
                   </>
                 ) : (
                   <>
@@ -505,18 +536,26 @@ export default function HostelDetail() {
                 </div>
               )}
 
-              {/* Availability bar (using room-type availability) */}
+              {/* Total physical rooms still open (sum of all room types) */}
               <div className="bg-gray-50 rounded-xl p-3 text-sm space-y-2">
                 <div className="flex justify-between text-gray-500">
-                  <span>Room types left</span>
-                  <span className={`font-semibold ${mapped.availableRooms > 0 ? "text-emerald-600" : "text-red-500"}`}>
-                    {mapped.availableRooms} of {mapped.totalRooms}
+                  <span>Total rooms available</span>
+                  <span className={`font-semibold ${mapped.totalSlotsAvailable > 0 ? "text-emerald-600" : "text-red-500"}`}>
+                    {mapped.totalSlotsAvailable}
+                    {mapped.totalSlotsInCategories > 0 && (
+                      <span className="text-gray-400 font-normal"> / {mapped.totalSlotsInCategories} total</span>
+                    )}
                   </span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-1.5">
                   <div className="bg-emerald-500 h-1.5 rounded-full transition-all"
-                    style={{width:`${(mapped.availableRooms / mapped.totalRooms) * 100}%`}}/>
+                    style={{
+                      width: `${mapped.totalSlotsInCategories > 0
+                        ? (mapped.totalSlotsAvailable / mapped.totalSlotsInCategories) * 100
+                        : 0}%`,
+                    }}/>
                 </div>
+                <p className="text-xs text-gray-400">Each reservation holds one room in the chosen category.</p>
               </div>
 
               {/* CTA buttons */}

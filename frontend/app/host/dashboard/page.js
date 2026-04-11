@@ -211,9 +211,12 @@ function MyHostelsTab({ hostels, rooms, reload }) {
   const saveRoom = async () => {
     setSaving(true);
     try {
+      const totalRooms = Math.max(1, Math.floor(Number(editingRoom.totalRooms) || 1));
       await api(`/api/hosts/rooms/${editingRoom._id}`, "PUT", {
-        name: editingRoom.name, price: Number(editingRoom.price),
-        billing: editingRoom.billing, capacity: Number(editingRoom.capacity || editingRoom.totalRooms),
+        name: editingRoom.name,
+        price: Number(editingRoom.price),
+        billing: editingRoom.billing,
+        totalRooms,
       });
       setEditingRoom(null); showMsg("Room updated."); reload();
     } catch (e) { showMsg(e.message, false); }
@@ -225,9 +228,11 @@ function MyHostelsTab({ hostels, rooms, reload }) {
     setSaving(true);
     try {
       await api("/api/hosts/rooms", "POST", {
-        hostelId: selectedId, name: newRoom.name,
-        price: Number(newRoom.price), billing: newRoom.billing,
-        capacity: Number(newRoom.totalRooms),
+        hostelId: selectedId,
+        name: newRoom.name,
+        price: Number(newRoom.price),
+        billing: newRoom.billing,
+        totalRooms: Math.max(1, Math.floor(Number(newRoom.totalRooms) || 1)),
       });
       setNewRoom({ name: "", price: "", billing: "Yearly", totalRooms: 1 });
       setShowAddRoom(false); showMsg("Room added."); reload();
@@ -363,8 +368,9 @@ function MyHostelsTab({ hostels, rooms, reload }) {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-[--text-secondary] mb-1">Number of Rooms</label>
+                    <label className="block text-xs font-semibold text-[--text-secondary] mb-1">Rooms in this category</label>
                     <input type="number" min={1} className={inputCls} value={newRoom.totalRooms} onChange={e => setNewRoom(p => ({ ...p, totalRooms: e.target.value }))} />
+                    <p className="text-[10px] text-[--text-muted] mt-1">How many physical rooms of this type exist? Each student reservation uses one.</p>
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -375,7 +381,11 @@ function MyHostelsTab({ hostels, rooms, reload }) {
             )}
 
             {hostelRooms.length === 0 ? <Empty icon="🛏️" title="No rooms added yet" sub="Add room types so students can see pricing and reserve." /> :
-              hostelRooms.map(room => (
+              hostelRooms.map(room => {
+                const cap = Math.max(1, Number(room.totalRooms) || 1);
+                const occ = Math.min(cap, Math.max(0, Number(room.reservedRooms) || 0));
+                const openSlots = cap - occ;
+                return (
                 <div key={room._id} className="mb-3">
                   {editingRoom?._id === room._id ? (
                     <div className="bg-blue-50/60 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-200 dark:border-blue-800 space-y-3">
@@ -387,8 +397,9 @@ function MyHostelsTab({ hostels, rooms, reload }) {
                           </div>
                         ))}
                         <div>
-                          <label className="block text-xs font-semibold text-[--text-secondary] mb-1">Total Rooms</label>
-                          <input type="number" min={1} className={inputCls} value={editingRoom.capacity || editingRoom.totalRooms || 1} onChange={e => setEditingRoom(p => ({ ...p, capacity: Number(e.target.value) }))} />
+                          <label className="block text-xs font-semibold text-[--text-secondary] mb-1">Rooms in this category</label>
+                          <input type="number" min={1} className={inputCls} value={Math.max(1, Number(editingRoom.totalRooms) || 1)} onChange={e => setEditingRoom(p => ({ ...p, totalRooms: e.target.value }))} />
+                          <p className="text-[10px] text-[--text-muted] mt-1">Cannot go below active reservations for this type.</p>
                         </div>
                         <div>
                           <label className="block text-xs font-semibold text-[--text-secondary] mb-1">Billing</label>
@@ -409,7 +420,7 @@ function MyHostelsTab({ hostels, rooms, reload }) {
                         <div>
                           <p className="font-semibold text-sm text-[--text-primary]">{room.name}</p>
                           <p className="text-xs text-[--text-muted]">
-                            GH₵{Number(room.price).toLocaleString()} / {room.billing} · {(room.capacity || room.totalRooms || 0) - (room.reservedRooms || room.currentOccupancy || 0)}/{room.capacity || room.totalRooms || 0} available
+                            GH₵{Number(room.price).toLocaleString()} / {room.billing} · {openSlots} of {cap} available
                           </p>
                         </div>
                       </div>
@@ -418,12 +429,13 @@ function MyHostelsTab({ hostels, rooms, reload }) {
                           className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition-all ${room.status === "available" ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200" : "bg-white/20 text-[--text-muted] border-white/20 hover:bg-emerald-50 hover:text-emerald-600"}`}>
                           {room.status === "available" ? "Active" : "Paused"}
                         </button>
-                        <button onClick={() => setEditingRoom({ ...room })} className="text-xs text-[#1E40AF] dark:text-blue-300 font-semibold hover:underline">Edit</button>
+                        <button onClick={() => setEditingRoom({ ...room, totalRooms: Math.max(1, Number(room.totalRooms) || 1) })} className="text-xs text-[#1E40AF] dark:text-blue-300 font-semibold hover:underline">Edit</button>
                       </div>
                     </div>
                   )}
                 </div>
-              ))
+                );
+              })
             }
           </Card>
         </>

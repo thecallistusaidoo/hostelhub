@@ -104,13 +104,24 @@ router.put("/hostels/:id", async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// POST /api/hosts/rooms — add room to hostel
+// POST /api/hosts/rooms — add room type + how many physical rooms exist in that category
 router.post("/rooms", async (req, res, next) => {
   try {
-    const { hostelId, name, price, billing, capacity, bathroom } = req.body;
+    const { hostelId, name, price, billing, bathroom } = req.body;
+    const rawTotal = req.body.totalRooms ?? req.body.capacity ?? 1;
+    const totalRooms = Math.max(1, Math.floor(Number(rawTotal)) || 1);
     const hostel = await Hostel.findOne({ _id: hostelId, ownerId: req.user.id });
     if (!hostel) return res.status(404).json({ message: "Hostel not found or not yours." });
-    const room = await Room.create({ hostelId, name, price: Number(price), billing, capacity: Number(capacity), bathroom });
+    const room = await Room.create({
+      hostelId,
+      name,
+      price: Number(price),
+      billing: billing || "Yearly",
+      totalRooms,
+      reservedRooms: 0,
+      bathroom: bathroom || "Shared",
+      status: "available",
+    });
     res.status(201).json({ message: "Room added.", room });
   } catch (err) { next(err); }
 });
@@ -120,8 +131,30 @@ router.put("/rooms/:id", async (req, res, next) => {
   try {
     const room = await Room.findById(req.params.id).populate("hostelId");
     if (!room || room.hostelId.ownerId.toString() !== req.user.id) return res.status(403).json({ message: "Not your room." });
-    const allowed = ["name","price","billing","capacity","currentOccupancy","bathroom","status"];
-    allowed.forEach(f => { if (req.body[f] !== undefined) room[f] = req.body[f]; });
+
+    const { name, price, billing, bathroom, status } = req.body;
+
+    if (name !== undefined) room.name = name;
+    if (price !== undefined) room.price = Number(price);
+    if (billing !== undefined) room.billing = billing;
+    if (bathroom !== undefined) room.bathroom = bathroom;
+    if (status !== undefined) room.status = status;
+
+    const totalFromBody = req.body.totalRooms !== undefined ? req.body.totalRooms : req.body.capacity;
+    if (totalFromBody !== undefined) {
+      const tr = Math.max(1, Math.floor(Number(totalFromBody)) || 1);
+      if (tr < room.reservedRooms) {
+        return res.status(400).json({
+          message: `This room type has ${room.reservedRooms} active reservation(s). Set total rooms to at least ${room.reservedRooms}.`,
+        });
+      }
+      room.totalRooms = tr;
+    }
+
+    if (room.status !== "inactive") {
+      room.status = room.availableRooms === 0 ? "fully_reserved" : "available";
+    }
+
     await room.save();
     res.json({ message: "Room updated.", room });
   } catch (err) { next(err); }
