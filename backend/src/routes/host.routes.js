@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { Host, Hostel, Room, Booking, Message } = require("../models");
+const { Host, Hostel, Room, Message } = require("../models");
 const { protect, restrictTo } = require("../middleware");
 const { uploadHostelSubmission } = require("../config/cloudinary");
 
@@ -19,7 +19,7 @@ router.get("/me", async (req, res, next) => {
 // PUT /api/hosts/update-profile
 router.put("/update-profile", async (req, res, next) => {
   try {
-    const allowed = ["fullName","phone","payoutMethod","bankName","accountNumber","accountName","momoNetwork","momoNumber","paystackRecipientCode"];
+    const allowed = ["fullName","phone"];
     const updates = {};
     allowed.forEach(f => { if (req.body[f] !== undefined) updates[f] = req.body[f]; });
     const host = await Host.findByIdAndUpdate(req.user.id, updates, { new: true, runValidators: true }).select("-password -refreshToken");
@@ -48,15 +48,10 @@ router.get("/my-hostels", async (req, res, next) => {
     const hostels = await Hostel.find({ ownerId: req.user.id }).sort({ createdAt: -1 });
     const hostelIds = hostels.map(h => h._id);
     const rooms = await Room.find({ hostelId: { $in: hostelIds } });
-    const bookings = await Booking.find({ hostelId: { $in: hostelIds } })
-      .populate("studentId", "firstName lastName email phone")
-      .populate("hostelId", "name")
-      .populate("roomId", "name price")
-      .sort({ createdAt: -1 });
     const messages = await Message.find({ receiverId: req.user.id, receiverModel: "Host" })
       .populate("senderId", "firstName lastName")
       .sort({ createdAt: -1 });
-    res.json({ hostels, rooms, bookings, messages });
+    res.json({ hostels, rooms, messages });
   } catch (err) { next(err); }
 });
 
@@ -106,34 +101,6 @@ router.put("/hostels/:id", async (req, res, next) => {
     allowed.forEach(f => { if (req.body[f] !== undefined) hostel[f] = req.body[f]; });
     await hostel.save();
     res.json({ message: "Hostel updated.", hostel });
-  } catch (err) { next(err); }
-});
-
-// GET /api/hosts/bookings — bookings for all my hostels
-router.get("/bookings", async (req, res, next) => {
-  try {
-    const myHostels = await Hostel.find({ ownerId: req.user.id }).select("_id");
-    const ids = myHostels.map(h => h._id);
-    const bookings = await Booking.find({ hostelId: { $in: ids } })
-      .populate("studentId", "firstName lastName email phone umatId program year")
-      .populate("hostelId", "name location")
-      .populate("roomId", "name price billing")
-      .sort({ createdAt: -1 });
-    res.json({ bookings });
-  } catch (err) { next(err); }
-});
-
-// PUT /api/hosts/bookings/:id — approve or reject
-router.put("/bookings/:id", async (req, res, next) => {
-  try {
-    const { status } = req.body;
-    if (!["approved","rejected"].includes(status)) return res.status(400).json({ message: "Status must be approved or rejected." });
-    const booking = await Booking.findById(req.params.id).populate("hostelId");
-    if (!booking) return res.status(404).json({ message: "Booking not found." });
-    if (booking.hostelId.ownerId.toString() !== req.user.id) return res.status(403).json({ message: "Not your booking." });
-    booking.status = status;
-    await booking.save();
-    res.json({ message: `Booking ${status}.`, booking });
   } catch (err) { next(err); }
 });
 

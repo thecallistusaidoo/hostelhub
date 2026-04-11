@@ -123,7 +123,7 @@ export default function SignupPage() {
             </p>
             {(role === "student"
               ? ["Browse verified hostels","Compare prices & amenities","Chat directly with hosts","Secure your room fast"]
-              : ["Free to list your hostel","Manage bookings in one place","Chat directly with students","Track views & inquiries"]
+              : ["Free to list your hostel","See reservations in one place","Chat directly with students","Track views & inquiries"]
             ).map(f => (
               <div key={f} className="flex items-center gap-3">
                 <div className="w-5 h-5 rounded-full bg-[#F59E0B] flex items-center justify-center flex-shrink-0">

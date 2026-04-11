@@ -100,11 +100,10 @@ export const student = {
   changePassword:(data)     => apiFetch("/api/students/change-password", { method: "PUT",  body: JSON.stringify(data) }),
   saveHostel:    (hostelId) => apiFetch("/api/students/save-hostel",     { method: "POST", body: JSON.stringify({ hostelId }) }),
   trackView:     (hostelId) => apiFetch(`/api/students/track-view/${hostelId}`, { method: "POST" }),
-  bookings:      ()         => apiFetch("/api/students/bookings"),
   sendMessage:   (data)     => apiFetch("/api/messages",                 { method: "POST", body: JSON.stringify(data) }),
   inbox:         ()         => apiFetch("/api/messages/inbox"),
   conversation:  (userId)   => apiFetch(`/api/messages/conversation/${userId}`),
-  book:          (data)     => apiFetch("/api/bookings",                 { method: "POST", body: JSON.stringify(data) }),
+  createReservation: (data) => apiFetch("/api/reservations",             { method: "POST", body: JSON.stringify(data) }),
 };
 
 // ── HOST ──────────────────────────────────────────────────────────────────────
@@ -115,8 +114,6 @@ export const host = {
   changePassword: (data)          => apiFetch("/api/hosts/change-password", { method: "PUT", body: JSON.stringify(data) }),
   addHostel:      (formData)      => apiUpload("/api/hosts/add-hostel", formData),
   updateHostel:   (id, data)      => apiFetch(`/api/hosts/hostels/${id}`,   { method: "PUT", body: JSON.stringify(data) }),
-  bookings:       ()              => apiFetch("/api/hosts/bookings"),
-  updateBooking:  (id, status)    => apiFetch(`/api/hosts/bookings/${id}`,  { method: "PUT", body: JSON.stringify({ status }) }),
   addRoom:        (data)          => apiFetch("/api/hosts/rooms",            { method: "POST", body: JSON.stringify(data) }),
   updateRoom:     (id, data)      => apiFetch(`/api/hosts/rooms/${id}`,     { method: "PUT", body: JSON.stringify(data) }),
   messages:       ()              => apiFetch("/api/hosts/messages"),
@@ -140,18 +137,6 @@ export const admin = {
   hosts:         (search)  => apiFetch(`/api/admin/hosts${search ? `?search=${search}` : ""}`),
   verifyHost:    (id)      => apiFetch(`/api/admin/hosts/${id}/verify`,    { method: "PUT" }),
   removeHost:    (id)      => apiFetch(`/api/admin/hosts/${id}`,           { method: "DELETE" }),
-  payments:      (params)  => {
-    const q = new URLSearchParams(params || {}).toString();
-    return apiFetch(`/api/admin/payments${q ? `?${q}` : ""}`);
-  },
-  paymentDetail: (id)      => apiFetch(`/api/admin/payments/${id}`),
-  paymentByReference: (reference) => apiFetch(`/api/admin/payments/reference/${encodeURIComponent(reference)}`),
-};
-
-// ── PAYMENTS ──────────────────────────────────────────────────────────────────
-export const payments = {
-  verify:  (data) => apiFetch("/api/payments/verify",  { method: "POST", body: JSON.stringify(data) }),
-  history: ()     => apiFetch("/api/payments/history"),
 };
 
 export { getUser, clearAuth, setTokens };

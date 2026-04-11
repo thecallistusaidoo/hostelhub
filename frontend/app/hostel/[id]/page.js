@@ -41,7 +41,11 @@ export default function HostelDetail() {
   const [mainImage, setMainImage] = useState(0);
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [saved, setSaved] = useState(false);
-  const [showBookingSuccess, setShowBookingSuccess] = useState(false);
+  const [showReserveModal, setShowReserveModal] = useState(false);
+  const [reservePeople, setReservePeople] = useState(1);
+  const [reserveMessage, setReserveMessage] = useState("");
+  const [reserveSubmitting, setReserveSubmitting] = useState(false);
+  const [reserveToast, setReserveToast] = useState(null);
 
   const user = useMemo(() => getUser(), []);
 
@@ -129,7 +133,7 @@ export default function HostelDetail() {
     ? Boolean(mapped.roomTypes[selectedRoom]?.available)
     : false;
 
-  const handleBook = () => {
+  const openReserve = () => {
     if (!user) {
       if (typeof window !== "undefined") {
         sessionStorage.setItem("redirectAfterLogin", window.location.pathname);
@@ -137,25 +141,50 @@ export default function HostelDetail() {
       router.push("/login");
       return;
     }
-
-    if (!mapped || selectedRoom === null) {
-      alert("Please select a room type before proceeding to payment.");
+    if (user.role !== "student") {
+      alert("Only student accounts can place a reservation. Sign in as a student or browse as a guest.");
       return;
     }
-
+    if (!mapped || selectedRoom === null) {
+      alert("Please select a room type first.");
+      return;
+    }
     const selectedRoomId = mapped.roomTypes[selectedRoom]?.id;
     if (!selectedRoomId) {
-      alert("Please select a valid room type before proceeding.");
+      alert("Please select a valid room type.");
       return;
     }
+    if (!roomIsAvailable) {
+      alert("This room type is fully reserved. Pick another or check back later.");
+      return;
+    }
+    setReservePeople(1);
+    setReserveMessage("");
+    setShowReserveModal(true);
+  };
 
-    // Keep the mock-style toast, but actually go to real payment
-    setShowBookingSuccess(true);
-    setTimeout(() => setShowBookingSuccess(false), 2000);
-
-    router.push(
-      `/pay?hostelId=${encodeURIComponent(mapped._id)}&roomId=${encodeURIComponent(selectedRoomId)}&hostelName=${encodeURIComponent(mapped.name)}&roomName=${encodeURIComponent(displayRoomName || "Room")}&amount=${encodeURIComponent(String(displayPrice || 0))}&billing=${encodeURIComponent(displayBilling || "Yearly")}`
-    );
+  const submitReservation = async () => {
+    const selectedRoomId = mapped.roomTypes[selectedRoom]?.id;
+    if (!selectedRoomId || !mapped?._id) return;
+    const n = Math.min(10, Math.max(1, Number(reservePeople) || 1));
+    setReserveSubmitting(true);
+    setReserveToast(null);
+    try {
+      await studentAPI.createReservation({
+        hostelId: mapped._id,
+        roomId: selectedRoomId,
+        numberOfPeople: n,
+        message: reserveMessage.trim() || undefined,
+      });
+      setShowReserveModal(false);
+      setReserveToast({ ok: true, m: "Reservation submitted. Admin will schedule a meetup." });
+      setTimeout(() => setReserveToast(null), 3500);
+      router.push("/student/dashboard?tab=reservations");
+    } catch (e) {
+      setReserveToast({ ok: false, m: e.message || "Could not reserve." });
+    } finally {
+      setReserveSubmitting(false);
+    }
   };
 
   const handleChat = () => {
@@ -202,10 +231,43 @@ export default function HostelDetail() {
     <div className="min-h-screen flex flex-col bg-gray-50">
       <Navbar/>
 
-      {/* Booking success toast */}
-      {showBookingSuccess && (
-        <div className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold flex items-center gap-2 animate-bounce">
-          ✓ Redirecting to payment...
+      {reserveToast && (
+        <div className={`fixed bottom-6 right-6 z-50 px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold ${reserveToast.ok ? "bg-emerald-600 text-white" : "bg-red-600 text-white"}`}>
+          {reserveToast.m}
+        </div>
+      )}
+
+      {showReserveModal && mapped && selectedRoom !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-extrabold text-gray-900">Reserve this room</h3>
+              <button type="button" onClick={() => !reserveSubmitting && setShowReserveModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
+            </div>
+            <p className="text-sm text-gray-600">
+              You are not paying online. We hold your spot; an admin will contact the host, set a meetup time and place, then notify you by email and SMS.
+            </p>
+            <div>
+              <p className="text-xs font-semibold text-gray-500 mb-1">Room</p>
+              <p className="font-semibold text-gray-900">{displayRoomName} · GH₵{Number(displayPrice || 0).toLocaleString()}/{displayBilling === "Semester" ? "sem" : "yr"}</p>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Number of people</label>
+              <input type="number" min={1} max={10} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"
+                value={reservePeople} onChange={e => setReservePeople(e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Note to admin (optional)</label>
+              <textarea className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm h-20 resize-none" placeholder="e.g. preferred move-in date"
+                value={reserveMessage} onChange={e => setReserveMessage(e.target.value)} />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button type="button" onClick={() => setShowReserveModal(false)} disabled={reserveSubmitting} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50">Cancel</button>
+              <button type="button" onClick={submitReservation} disabled={reserveSubmitting} className="flex-1 py-2.5 rounded-xl bg-[#1E40AF] text-white text-sm font-semibold hover:bg-[#1e3a8a] disabled:opacity-50">
+                {reserveSubmitting ? "Submitting…" : "Submit reservation"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -333,7 +395,7 @@ export default function HostelDetail() {
             {/* ── Room Types — clicking updates sidebar price ── */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
               <h2 className="font-bold text-gray-800 mb-1" style={{fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Room Types & Pricing</h2>
-              <p className="text-xs text-gray-400 mb-4">Select a room type to update the price and pay.</p>
+              <p className="text-xs text-gray-400 mb-4">Select a room type to see pricing, then reserve (no online payment).</p>
               <div className="space-y-3">
                 {mapped.roomTypes.map((room, idx) => (
                   <div
@@ -459,7 +521,7 @@ export default function HostelDetail() {
 
               {/* CTA buttons */}
               <button
-                onClick={handleBook}
+                onClick={openReserve}
                 disabled={!roomIsAvailable}
                 className={`w-full py-3 rounded-xl font-semibold text-base transition-all ${
                   roomIsAvailable
@@ -467,7 +529,7 @@ export default function HostelDetail() {
                     : "bg-gray-200 text-gray-400 cursor-not-allowed"
                 }`}
               >
-                {!user ? "Sign In to Book" : selectedRoom !== null ? `Pay for ${mapped.roomTypes[selectedRoom].name}` : "Select a room to pay"}
+                {!user ? "Sign In to Reserve" : user.role !== "student" ? "Students: sign in to reserve" : selectedRoom !== null ? `Reserve ${mapped.roomTypes[selectedRoom].name}` : "Select a room to reserve"}
               </button>
 
               <button
@@ -482,7 +544,7 @@ export default function HostelDetail() {
 
               {!user && (
                 <p className="text-xs text-center text-gray-400">
-                  <Link href="/signup" className="text-[#1E40AF] font-semibold hover:underline">Create a free account</Link> to pay or chat
+                  <Link href="/signup" className="text-[#1E40AF] font-semibold hover:underline">Create a free student account</Link> to reserve or chat
                 </p>
               )}
             </div>

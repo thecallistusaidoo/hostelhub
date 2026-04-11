@@ -2,7 +2,7 @@ const request = require("supertest");
 const mongoose = require("mongoose");
 const { MongoMemoryServer } = require("mongodb-memory-server");
 const app = require("../src/server");
-const { Student, Host, Hostel } = require("../src/models");
+const { Student, Host, Hostel, Room } = require("../src/models");
 
 let mongod;
 let studentToken, hostToken, studentId, hostId, hostelId;
@@ -170,39 +170,59 @@ describe("Hostels", () => {
   });
 });
 
-// ─── BOOKING TESTS ────────────────────────────────────────────
-describe("Bookings", () => {
+// ─── RESERVATION TESTS ───────────────────────────────────────
+describe("Reservations", () => {
+  let roomId;
 
-  test("POST /api/bookings — student can book an approved hostel", async () => {
-    const res = await request(app)
-      .post("/api/bookings")
-      .set("Authorization", `Bearer ${studentToken}`)
-      .send({ hostelId: hostelId.toString(), message: "I would like to book this room please." });
-    expect(res.status).toBe(201);
-    expect(res.body.booking.status).toBe("pending");
+  test("seed room type for reservations", async () => {
+    const room = await Room.create({
+      hostelId,
+      name: "2 in a room",
+      price: 3000,
+      billing: "Yearly",
+      totalRooms: 5,
+      reservedRooms: 0,
+    });
+    roomId = room._id;
+    expect(roomId).toBeTruthy();
   });
 
-  test("POST /api/bookings — prevents duplicate pending booking", async () => {
+  test("POST /api/reservations — student creates reservation", async () => {
     const res = await request(app)
-      .post("/api/bookings")
+      .post("/api/reservations")
       .set("Authorization", `Bearer ${studentToken}`)
-      .send({ hostelId: hostelId.toString() });
+      .send({
+        hostelId: hostelId.toString(),
+        roomId: roomId.toString(),
+        numberOfPeople: 1,
+        message: "Interested in viewing",
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.reservation.status).toBe("pending");
+  });
+
+  test("POST /api/reservations — duplicate active reservation rejected", async () => {
+    const res = await request(app)
+      .post("/api/reservations")
+      .set("Authorization", `Bearer ${studentToken}`)
+      .send({ hostelId: hostelId.toString(), roomId: roomId.toString(), numberOfPeople: 1 });
     expect(res.status).toBe(400);
   });
 
-  test("GET /api/bookings/student/me — student sees their bookings", async () => {
+  test("GET /api/reservations/mine — student lists reservations", async () => {
     const res = await request(app)
-      .get("/api/bookings/student/me")
+      .get("/api/reservations/mine")
       .set("Authorization", `Bearer ${studentToken}`);
     expect(res.status).toBe(200);
-    expect(res.body.bookings.length).toBeGreaterThan(0);
+    expect(res.body.reservations.length).toBeGreaterThan(0);
   });
 
-  test("GET /api/bookings/host/me — host sees bookings for their hostels", async () => {
+  test("GET /api/reservations/host — host lists reservations", async () => {
     const res = await request(app)
-      .get("/api/bookings/host/me")
+      .get("/api/reservations/host")
       .set("Authorization", `Bearer ${hostToken}`);
     expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.reservations)).toBe(true);
   });
 });
 

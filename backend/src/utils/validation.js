@@ -37,12 +37,6 @@ const addHostelSchema = z.object({
   priceTo:        z.number().optional(),
 });
 
-const bookingSchema = z.object({
-  hostelId: z.string(),
-  roomId:   z.string(),
-  message:  z.string().optional(),
-});
-
 const messageSchema = z.object({
   receiverId:    z.string(),
   receiverModel: z.enum(["Student","Host"]),
@@ -55,6 +49,5 @@ module.exports = {
   signupHostSchema,
   loginSchema,
   addHostelSchema,
-  bookingSchema,
   messageSchema,
 };

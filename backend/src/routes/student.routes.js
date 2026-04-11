@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { Student, Hostel, Booking, Message, Payment } = require("../models");
+const { Student, Hostel, Message } = require("../models");
 const { protect, restrictTo } = require("../middleware");
 
 router.use(protect, restrictTo("student"));
@@ -75,33 +75,6 @@ router.post("/track-view/:hostelId", async (req, res, next) => {
     // Also increment hostel view count
     await Hostel.findByIdAndUpdate(hostelId, { $inc: { viewsCount: 1 } });
     res.json({ message: "View tracked." });
-  } catch (err) { next(err); }
-});
-
-// GET /api/students/bookings — own bookings
-router.get("/bookings", async (req, res, next) => {
-  try {
-    const bookings = await Booking.find({ studentId: req.user.id })
-      .populate("hostelId", "name location city images")
-      .populate("roomId", "name price billing")
-      .sort({ createdAt: -1 });
-
-    // For paid bookings, attach payment info
-    for (const booking of bookings) {
-      if (booking.status === "paid" && booking.paymentRef) {
-        const payment = await Payment.findOne({ reference: booking.paymentRef });
-        if (payment) {
-          booking.payment = {
-            amountPaid: payment.amountPaid,
-            platformFee: payment.platformFee,
-            hostPayout: payment.hostPayout,
-            paystackStatus: payment.paystackChargeStatus,
-          };
-        }
-      }
-    }
-
-    res.json({ bookings });
   } catch (err) { next(err); }
 });
 

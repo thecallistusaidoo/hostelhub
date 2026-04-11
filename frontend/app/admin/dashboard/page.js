@@ -3,14 +3,15 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { admin as adminAPI, getUser, clearAuth } from "../../lib/api";
+import ReservationsTab from "./ResrvationsTab";
 
 const TABS = [
-  { id:"dashboard", label:"Dashboard",   icon:"📊" },
-  { id:"pending",   label:"Pending",     icon:"⏳" },
-  { id:"hostels",   label:"All Hostels", icon:"🏢" },
-  { id:"students",  label:"Students",    icon:"🎓" },
-  { id:"hosts",     label:"Hosts",       icon:"🏠" },
-  { id:"payments",  label:"Payments",    icon:"💰" },
+  { id:"dashboard",    label:"Dashboard",    icon:"📊" },
+  { id:"pending",      label:"Pending",      icon:"⏳" },
+  { id:"reservations", label:"Reservations", icon:"📋" },
+  { id:"hostels",      label:"All Hostels",  icon:"🏢" },
+  { id:"students",     label:"Students",     icon:"🎓" },
+  { id:"hosts",        label:"Hosts",        icon:"🏠" },
 ];
 
 function Spinner() { return <div className="w-7 h-7 border-4 border-[#1E40AF] border-t-transparent rounded-full animate-spin mx-auto"/>; }
@@ -71,20 +72,22 @@ function DashboardTab({ stats, setActiveTab }) {
         ))}
       </div>
 
-      {(stats.totalRevenue > 0 || stats.totalPaidOut > 0) && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <span style={{fontSize:"22px"}}>💰</span>
-            <p className="text-2xl font-extrabold text-emerald-600 mt-2">GH₵{stats.totalRevenue?.toLocaleString()}</p>
-            <p className="text-xs text-gray-400 mt-0.5">Platform Revenue (5% fee)</p>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { l:"Total Reservations", v: stats.reservationsTotal ?? 0, icon:"📋", tab:"reservations" },
+          { l:"Pending (need meetup)", v: stats.reservationsPending ?? 0, icon:"⏳", tab:"reservations", hi: (stats.reservationsPending ?? 0) > 0 },
+          { l:"Meetup scheduled", v: stats.reservationsScheduled ?? 0, icon:"📅", tab:"reservations" },
+          { l:"Confirmed", v: stats.reservationsConfirmed ?? 0, icon:"✅", tab:"reservations" },
+        ].map(s => (
+          <div key={s.l} className={`bg-white rounded-2xl border shadow-sm p-5 cursor-pointer hover:shadow-md transition ${s.hi ? "border-amber-300" : "border-gray-100"}`}
+            onClick={() => setActiveTab(s.tab)}>
+            <span style={{fontSize:"24px"}}>{s.icon}</span>
+            <p className={`text-3xl font-extrabold mt-2 ${s.hi ? "text-amber-600" : "text-gray-800"}`}>{s.v}</p>
+            <p className="text-xs font-semibold text-gray-700 mt-0.5">{s.l}</p>
           </div>
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <span style={{fontSize:"22px"}}>🏦</span>
-            <p className="text-2xl font-extrabold text-[#1E40AF] mt-2">GH₵{stats.totalPaidOut?.toLocaleString()}</p>
-            <p className="text-xs text-gray-400 mt-0.5">Paid Out to Hosts (95%)</p>
-          </div>
-        </div>
-      )}
+        ))}
+      </div>
+      <p className="text-xs text-gray-400">Students reserve online; you schedule time and place after coordinating with the host, then both parties are notified.</p>
     </div>
   );
 }
@@ -542,185 +545,6 @@ function UsersTab({ type }) {
   );
 }
 
-// ── PAYMENTS ──────────────────────────────────────────────────────────────────
-function PaymentsTab({ stats }) {
-  const [payments, setPayments] = useState(null);
-  const [chargeFilter, setChargeFilter] = useState("all");
-  const [selectedPayment, setSelectedPayment] = useState(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
-
-  useEffect(() => {
-    const params = {};
-    if (chargeFilter !== "all") params.chargeStatus = chargeFilter;
-    params.includePaystack = "true";
-    adminAPI.payments(params).then(d => setPayments(d.payments || [])).catch(() => setPayments([]));
-  }, [chargeFilter]);
-
-  const openPayment = async (paymentRef) => {
-    try {
-      setLoadingDetail(true);
-      const data = await adminAPI.paymentByReference(paymentRef);
-      setSelectedPayment(data.payment || null);
-    } finally {
-      setLoadingDetail(false);
-    }
-  };
-
-  const getGatewayFee = (payment) => {
-    if (!payment) return 0;
-    if (payment.gatewayFee && payment.gatewayFee > 0) return payment.gatewayFee;
-    if (!payment.amountPaid || payment.amountPaid <= 0) return 0;
-    const pct = payment.gatewayFeePercent || 1.95;
-    return Math.round((payment.amountPaid * pct / 100) * 100) / 100;
-  };
-
-  const getFinancials = (payment) => {
-    if (!payment) return 0;
-    const fee = getGatewayFee(payment);
-    const netAfterGateway = Math.max(0, (payment.amountPaid || 0) - fee);
-    const platformPct = payment.platformFeePercent || 5;
-    const platformFee = Math.round((netAfterGateway * platformPct / 100) * 100) / 100;
-    const hostPayout = Math.round((netAfterGateway - platformFee) * 100) / 100;
-    return { gatewayFee: fee, netAfterGateway, platformFee, hostPayout };
-  };
-
-  if (payments === null) return <div className="flex justify-center py-20"><Spinner/></div>;
-
-  return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {[
-          { l:"Platform Revenue (after Paystack 1.95%)", v:`GH₵${stats?.totalRevenue?.toLocaleString()||0}`, icon:"💰", color:"text-emerald-600" },
-          { l:"Paid Out to Hosts (after all fees)", v:`GH₵${stats?.totalPaidOut?.toLocaleString()||0}`, icon:"🏦", color:"text-[#1E40AF]" },
-        ].map(s => (
-          <div key={s.l} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <span style={{fontSize:"22px"}}>{s.icon}</span>
-            <p className={`text-2xl font-extrabold mt-2 ${s.color}`}>{s.v}</p>
-            <p className="text-xs text-gray-400 mt-0.5">{s.l}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        {[
-          { id: "all", label: "All" },
-          { id: "success", label: "Successful Charges" },
-          { id: "pending", label: "Pending Charges" },
-          { id: "failed", label: "Failed Charges" },
-        ].map((opt) => (
-          <button
-            key={opt.id}
-            onClick={() => setChargeFilter(opt.id)}
-            className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition ${
-              chargeFilter === opt.id
-                ? "bg-[#1E40AF] text-white border-[#1E40AF]"
-                : "bg-white text-gray-500 border-gray-200 hover:border-[#1E40AF] hover:text-[#1E40AF]"
-            }`}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
-
-      {payments.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10">
-          <Empty icon="💰" title="No payments yet" sub="Payments from students will appear here once processed."/>
-        </div>
-      ) : (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100">
-            <h2 className="font-bold text-gray-800">Transaction History</h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-100">
-                <tr>
-                  {["Student","Hostel","Amount Paid","Paystack Fee","Platform Fee","Host Payout","Date","Status"].map(h => (
-                    <th key={h} className="text-left text-xs font-semibold text-gray-400 px-4 py-3">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {payments.map(p => (
-                  (() => {
-                    const f = getFinancials(p);
-                    return (
-                  <tr key={p._id} className="hover:bg-gray-50 transition cursor-pointer" onClick={() => openPayment(p.reference)}>
-                    <td className="px-4 py-3 font-semibold text-gray-800">
-                      {(p.studentId?.firstName || p.studentId?.lastName)
-                        ? `${p.studentId?.firstName || ""} ${p.studentId?.lastName || ""}`.trim()
-                        : (p.studentId?.email || "Unknown Student")}
-                    </td>
-                    <td className="px-4 py-3 text-gray-500">{p.hostelId?.name || "—"}</td>
-                    <td className="px-4 py-3 font-bold text-gray-800">GH₵{p.amountPaid?.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-amber-600 font-semibold">GH₵{f.gatewayFee.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-emerald-600 font-semibold">GH₵{f.platformFee.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-[#1E40AF] font-semibold">GH₵{f.hostPayout.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-gray-400">{new Date(p.createdAt).toLocaleDateString()}</td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                        p.paystackChargeStatus === "success" ? "bg-emerald-50 text-emerald-700"
-                          : p.paystackChargeStatus === "failed" ? "bg-red-50 text-red-700"
-                            : "bg-amber-50 text-amber-700"
-                      }`}>
-                        {p.paystackChargeStatus === "success" ? "✓ Charge Success" : p.paystackChargeStatus === "failed" ? "✗ Charge Failed" : "⏳ Charge Pending"}
-                      </span>
-                    </td>
-                  </tr>
-                    );
-                  })()
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {loadingDetail && <div className="text-xs text-gray-400">Loading transaction details...</div>}
-
-      {selectedPayment && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-2xl rounded-2xl border border-gray-100 shadow-xl p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-extrabold text-gray-900">Transaction Detail</h3>
-              <button onClick={() => setSelectedPayment(null)} className="text-gray-400 hover:text-gray-600">✕</button>
-            </div>
-            <div className="space-y-2 text-sm">
-              {(() => {
-                const f = getFinancials(selectedPayment);
-                return (
-                  <>
-              <p><span className="text-gray-400">Reference:</span> <span className="font-mono">{selectedPayment.reference}</span></p>
-              <p><span className="text-gray-400">Source:</span> {selectedPayment.source || "platform"}</p>
-              <p><span className="text-gray-400">Student:</span> {(selectedPayment.studentId?.firstName || selectedPayment.studentId?.lastName) ? `${selectedPayment.studentId?.firstName || ""} ${selectedPayment.studentId?.lastName || ""}`.trim() : (selectedPayment.studentId?.email || "Unknown Student")}</p>
-              <p><span className="text-gray-400">Host:</span> {selectedPayment.hostId?.fullName || "—"} ({selectedPayment.hostId?.email || "—"})</p>
-              <p><span className="text-gray-400">Hostel:</span> {selectedPayment.hostelId?.name || "—"}</p>
-              <p><span className="text-gray-400">Amount Paid:</span> GH₵{selectedPayment.amountPaid?.toLocaleString()}</p>
-              <p><span className="text-gray-400">Paystack Fee ({selectedPayment.gatewayFeePercent || 1.95}%):</span> GH₵{f.gatewayFee.toLocaleString()}</p>
-              <p><span className="text-gray-400">Net After Paystack:</span> GH₵{f.netAfterGateway.toLocaleString()}</p>
-              <p><span className="text-gray-400">Platform Fee ({selectedPayment.platformFeePercent || 5}% of net):</span> GH₵{f.platformFee.toLocaleString()}</p>
-              <p><span className="text-gray-400">Host Payout:</span> GH₵{f.hostPayout.toLocaleString()}</p>
-              <p><span className="text-gray-400">Balance Check:</span> GH₵{((selectedPayment.amountPaid || 0) - f.gatewayFee - f.platformFee - f.hostPayout).toFixed(2)}</p>
-              <p><span className="text-gray-400">Charge Status:</span> {selectedPayment.paystackChargeStatus}</p>
-              <p><span className="text-gray-400">Charge Failure Reason:</span> {selectedPayment.chargeFailureReason || "—"}</p>
-              <p><span className="text-gray-400">Gateway Response:</span> {selectedPayment.paystackGatewayResponse || "—"}</p>
-              <p><span className="text-gray-400">Transfer Status:</span> {selectedPayment.transferStatus || "—"}</p>
-              <p><span className="text-gray-400">Transfer Failure Reason:</span> {selectedPayment.transferFailureReason || "—"}</p>
-              <p><span className="text-gray-400">Transfer Code:</span> {selectedPayment.transferCode || "—"}</p>
-              <p><span className="text-gray-400">Booking ID:</span> {selectedPayment.bookingId?._id || "—"}</p>
-              <p><span className="text-gray-400">Booking Payment Status:</span> {selectedPayment.bookingId?.paymentStatus || "—"}</p>
-              <p><span className="text-gray-400">Created:</span> {new Date(selectedPayment.createdAt).toLocaleString()}</p>
-                  </>
-                );
-              })()}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── MAIN ──────────────────────────────────────────────────────────────────────
 export default function AdminDashboard() {
   const router = useRouter();
@@ -768,6 +592,11 @@ export default function AdminDashboard() {
                     {stats.pendingHostels}
                   </span>
                 )}
+                {tab.id==="reservations" && stats?.reservationsPending > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-amber-500 text-white text-xs font-extrabold min-w-[1.25rem] h-5 px-1 rounded-full flex items-center justify-center border-2 border-white">
+                    {stats.reservationsPending}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -786,6 +615,9 @@ export default function AdminDashboard() {
               {tab.id==="pending" && stats?.pendingHostels > 0 && (
                 <span className="bg-red-500 text-white text-xs w-4 h-4 rounded-full flex items-center justify-center font-bold">{stats.pendingHostels}</span>
               )}
+              {tab.id==="reservations" && stats?.reservationsPending > 0 && (
+                <span className="bg-amber-500 text-white text-xs min-w-[1rem] h-4 px-0.5 rounded-full flex items-center justify-center font-bold">{stats.reservationsPending}</span>
+              )}
             </button>
           ))}
         </div>
@@ -795,9 +627,9 @@ export default function AdminDashboard() {
         {activeTab === "dashboard" && <DashboardTab stats={stats} setActiveTab={setActiveTab}/>}
         {activeTab === "pending"   && <PendingTab reload={loadStats}/>}
         {activeTab === "hostels"   && <AllHostelsTab/>}
-        {activeTab === "students"  && <UsersTab type="student"/>}
-        {activeTab === "hosts"     && <UsersTab type="host"/>}
-        {activeTab === "payments"  && <PaymentsTab stats={stats}/>}
+        {activeTab === "students"     && <UsersTab type="student"/>}
+        {activeTab === "hosts"        && <UsersTab type="host"/>}
+        {activeTab === "reservations" && <ReservationsTab onUpdated={loadStats}/>}
       </main>
     </div>
   );

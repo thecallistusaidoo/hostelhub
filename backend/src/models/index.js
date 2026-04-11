@@ -36,23 +36,6 @@ const hostSchema = new mongoose.Schema({
   hostelIds:    [{ type: mongoose.Schema.Types.ObjectId, ref: "Hostel" }],
   verified:     { type: Boolean, default: false },
   avatar:       { type: String, default: "" },
-
-  // ── Payout information (what the host enters) ──────────────────────────────
-  payoutMethod:  { type: String, enum: ["bank", "momo", ""], default: "" },
-  // Bank fields
-  bankName:      { type: String, default: "" },
-  bankCode:      { type: String, default: "" },   // Paystack bank code e.g. "030" for GCB
-  accountNumber: { type: String, default: "" },
-  accountName:   { type: String, default: "" },   // Verified by Paystack
-  // MoMo fields
-  momoNetwork:   { type: String, default: "" },   // "mtn", "vod", "tgo"
-  momoNumber:    { type: String, default: "" },
-
-  // ── Paystack recipient (set automatically when host saves payout info) ──────
-  paystackRecipientCode: { type: String, default: "" },  // e.g. "RCP_xxxxxxxxxxxx"
-  paystackRecipientId:   { type: Number, default: null }, // Paystack internal ID
-  payoutSetupComplete:   { type: Boolean, default: false },
-
   role:         { type: String, default: "host" },
   refreshToken: { type: String, select: false },
 }, { timestamps: true });
@@ -99,24 +82,53 @@ const roomSchema = new mongoose.Schema({
   name:             { type: String, required: true },
   price:            { type: Number, required: true },
   billing:          { type: String, enum: ["Yearly","Semester"], default: "Yearly" },
-  capacity:         { type: Number, required: true },
-  currentOccupancy: { type: Number, default: 0 },
+  // totalRooms = total physical rooms of this type
+  totalRooms:       { type: Number, required: true, default: 1 },
+  // reservedRooms = rooms with active/pending reservations
+  reservedRooms:    { type: Number, default: 0 },
   bathroom:         { type: String, default: "Shared" },
-  status:           { type: String, enum: ["available","booked","inactive"], default: "available" },
+  status:           { type: String, enum: ["available","fully_reserved","inactive"], default: "available" },
 }, { timestamps: true });
 
-// ─── BOOKING ──────────────────────────────────────────────────────────────────
-const bookingSchema = new mongoose.Schema({
-  studentId:  { type: mongoose.Schema.Types.ObjectId, ref: "Student", required: true },
-  hostelId:   { type: mongoose.Schema.Types.ObjectId, ref: "Hostel",  required: true },
-  roomId:     { type: mongoose.Schema.Types.ObjectId, ref: "Room" },
-  status:     { type: String, enum: ["pending","approved","rejected","paid"], default: "pending" },
-  amount:     { type: Number, default: 0 },
-  currency:   { type: String, default: "GHS" },
-  paymentStatus: { type: String, enum: ["pending","success","failed"], default: "pending" },
-  paymentFailureReason: { type: String, default: "" },
-  message:    { type: String, default: "" },
-  paymentRef: { type: String, default: "" },
+// Virtual: how many rooms actually remain open
+roomSchema.virtual("availableRooms").get(function () {
+  return Math.max(0, this.totalRooms - this.reservedRooms);
+});
+roomSchema.set("toJSON", { virtuals: true });
+roomSchema.set("toObject", { virtuals: true });
+
+// ─── RESERVATION (replaces Booking + Payment) ─────────────────────────────────
+// A reservation is created when a student selects a hostel + room type + # of people.
+// Admin then schedules a physical meetup with student + host.
+const reservationSchema = new mongoose.Schema({
+  studentId:      { type: mongoose.Schema.Types.ObjectId, ref: "Student", required: true },
+  hostelId:       { type: mongoose.Schema.Types.ObjectId, ref: "Hostel",  required: true },
+  roomId:         { type: mongoose.Schema.Types.ObjectId, ref: "Room",    required: true },
+  hostId:         { type: mongoose.Schema.Types.ObjectId, ref: "Host",    required: true },
+
+  // How many people the student wants to reserve for (important for "X in a room" types)
+  numberOfPeople: { type: Number, required: true, min: 1, default: 1 },
+
+  // Student's message / notes
+  message:        { type: String, default: "" },
+
+  // Status flow: pending → scheduled → confirmed → cancelled
+  status: {
+    type: String,
+    enum: ["pending", "scheduled", "confirmed", "cancelled"],
+    default: "pending",
+  },
+
+  // ── Meetup scheduling (set by admin) ───────────────────────────────────────
+  meetup: {
+    scheduledAt:  { type: Date },           // The date/time of the physical meetup
+    location:     { type: String, default: "" }, // Where to meet (usually at the hostel)
+    notes:        { type: String, default: "" }, // Any admin notes for the meeting
+    // Whether notifications were sent
+    notificationSent: { type: Boolean, default: false },
+    notifiedAt:   { type: Date },
+  },
+
 }, { timestamps: true });
 
 // ─── MESSAGE ──────────────────────────────────────────────────────────────────
@@ -130,51 +142,11 @@ const messageSchema = new mongoose.Schema({
   read:          { type: Boolean, default: false },
 }, { timestamps: true });
 
-// ─── PAYMENT ──────────────────────────────────────────────────────────────────
-const paymentSchema = new mongoose.Schema({
-  // What was paid
-  reference:         { type: String, required: true, unique: true },  // e.g. "HH-1234567890-ABCDEF"
-  studentId:         { type: mongoose.Schema.Types.ObjectId, ref: "Student", required: true },
-  hostelId:          { type: mongoose.Schema.Types.ObjectId, ref: "Hostel",  required: true },
-  hostId:            { type: mongoose.Schema.Types.ObjectId, ref: "Host",    required: true },
-  bookingId:         { type: mongoose.Schema.Types.ObjectId, ref: "Booking" },
-  roomName:          { type: String, default: "" },
-  amountPaid:        { type: Number, required: true },    // Full amount in GH₵
-  amountPaidPesewas: { type: Number, required: true },    // Full amount in pesewas (amountPaid * 100)
-
-  // Fee split
-  gatewayFeePercent: { type: Number, default: 1.95 },
-  gatewayFee:        { type: Number, default: 0 },           // Paystack charge deducted first
-  netAfterGateway:   { type: Number, default: 0 },           // amountPaid - gatewayFee
-  platformFeePercent:{ type: Number, default: 5 },
-  platformFee:       { type: Number, required: true },       // Platform fee taken from netAfterGateway
-  hostPayout:        { type: Number, required: true },       // Host payout from netAfterGateway
-
-  // Paystack charge status (money hitting your account)
-  paystackChargeStatus: { type: String, enum: ["pending","success","failed"], default: "pending" },
-  paystackGatewayResponse: { type: String, default: "" },
-  paystackChannel: { type: String, default: "" },
-  chargeFailureReason: { type: String, default: "" },
-  paidAt: { type: Date },
-  currency: { type: String, default: "GHS" },
-
-  // Transfer to host status (money going from your account to host)
-  transferReference:  { type: String, default: "" },      // Paystack transfer reference
-  transferCode:       { type: String, default: "" },      // Paystack transfer_code
-  transferStatus:     { type: String, enum: ["pending","initiated","success","failed","reversed",""], default: "" },
-  transferFailureReason: { type: String, default: "" },
-
-  // Settled means host has been paid
-  settled:           { type: Boolean, default: false },
-  settledAt:         { type: Date },
-}, { timestamps: true });
-
 module.exports = {
-  Student: mongoose.model("Student", studentSchema),
-  Host:    mongoose.model("Host",    hostSchema),
-  Hostel:  mongoose.model("Hostel",  hostelSchema),
-  Room:    mongoose.model("Room",    roomSchema),
-  Booking: mongoose.model("Booking", bookingSchema),
-  Message: mongoose.model("Message", messageSchema),
-  Payment: mongoose.model("Payment", paymentSchema),
+  Student:     mongoose.model("Student",     studentSchema),
+  Host:        mongoose.model("Host",        hostSchema),
+  Hostel:      mongoose.model("Hostel",      hostelSchema),
+  Room:        mongoose.model("Room",        roomSchema),
+  Reservation: mongoose.model("Reservation", reservationSchema),
+  Message:     mongoose.model("Message",     messageSchema),
 };

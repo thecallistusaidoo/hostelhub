@@ -12,12 +12,10 @@ const dns = require("dns");
 const authRoutes     = require("./routes/auth.routes");
 const studentRoutes  = require("./routes/student.routes");
 const hostRoutes     = require("./routes/host.routes");
-const hostPayoutRoutes = require("./routes/host.payout.routes");
 const hostelRoutes   = require("./routes/hostel.routes");
-const bookingRoutes  = require("./routes/booking.routes");
 const messageRoutes  = require("./routes/message.routes");
 const adminRoutes    = require("./routes/admin.routes");
-const paymentRoutes  = require("./routes/payment.routes");
+const reservationRoutes = require("./routes/reservation.routes");
 
 const { errorHandler } = require("./middleware");
 const { apiLimiter }   = require("./middleware/rateLimit.middleware");
@@ -49,19 +47,7 @@ app.use(cors({
   methods: ["GET","POST","PUT","DELETE","PATCH","OPTIONS"],
 }));
 
-// ══════════════════════════════════════════════════════════════════
-// ⚠️  CRITICAL: Paystack webhook MUST be registered BEFORE express.json()
-// The webhook handler needs the raw request body (Buffer) to verify
-// the HMAC signature. express.json() would parse it into an object
-// and break signature verification.
-// ══════════════════════════════════════════════════════════════════
-app.post(
-  "/api/payments/webhook",
-  express.raw({ type: "application/json" }),
-  require("./routes/payment.routes").webhookHandler || (() => {})
-);
-
-// ── Body parsing (AFTER webhook route)
+// ── Body parsing
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -79,12 +65,10 @@ app.use("/api", apiLimiter);
 app.use("/api/auth",     authRoutes);
 app.use("/api/students", studentRoutes);
 app.use("/api/hosts",    hostRoutes);
-app.use("/api/hosts",    hostPayoutRoutes);   // payout sub-routes
 app.use("/api/hostels",  hostelRoutes);
-app.use("/api/bookings", bookingRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/admin",    adminRoutes);
-app.use("/api/payments", paymentRoutes);      // all payment routes (webhook already registered above)
+app.use("/api/reservations", reservationRoutes);
 
 // ── Health check
 app.get("/api/health", (req, res) => res.json({ status: "ok", env: process.env.NODE_ENV }));
